@@ -15,6 +15,7 @@ type Client = {
 
 type Item = {
   name: string
+  description: string
   item_type: 'product' | 'service'
   quantity: string
   unit_price: string
@@ -43,19 +44,20 @@ export default function NewQuotePage() {
   const [newClient, setNewClient] = useState({ name: '', email: '', phone: '', address: '' })
   const [isNewClient, setIsNewClient] = useState(false)
 
-  const [items, setItems] = useState<Item[]>([{ name: '', item_type: 'product', quantity: '', unit_price: '', line_total: 0 }])
+  const [items, setItems] = useState<Item[]>([{ name: '', description: '', item_type: 'product', quantity: '', unit_price: '', line_total: 0 }])
   const [currencyCode, setCurrencyCode] = useState('USD')
   const [currencySymbol, setCurrencySymbol] = useState('$')
   const [vatRate, setVatRate] = useState(0)
   const [vatEnabled, setVatEnabled] = useState(false)
   const [notes, setNotes] = useState('')
   const [issueDate, setIssueDate] = useState(new Date().toISOString().split('T')[0])
+
   const getDefaultExpiry = () => {
-  const date = new Date()
-  date.setDate(date.getDate() + 7)
-  return date.toISOString().split('T')[0]
-}
-const [expiryDate, setExpiryDate] = useState(getDefaultExpiry())
+    const date = new Date()
+    date.setDate(date.getDate() + 7)
+    return date.toISOString().split('T')[0]
+  }
+  const [expiryDate, setExpiryDate] = useState(getDefaultExpiry())
 
   const [itemSuggestions, setItemSuggestions] = useState<any[]>([])
   const [activeItemIndex, setActiveItemIndex] = useState<number | null>(null)
@@ -107,7 +109,7 @@ const [expiryDate, setExpiryDate] = useState(getDefaultExpiry())
   }
 
   const addItem = () => {
-    setItems([...items, { name: '', item_type: 'product', quantity: '', unit_price: '', line_total: 0 }])
+    setItems([...items, { name: '', description: '', item_type: 'product', quantity: '', unit_price: '', line_total: 0 }])
   }
 
   const removeItem = (index: number) => {
@@ -139,6 +141,7 @@ const [expiryDate, setExpiryDate] = useState(getDefaultExpiry())
     updated[index] = {
       ...updated[index],
       name: suggestion.name,
+      description: suggestion.description || '',
       item_type: suggestion.type,
       unit_price: price,
       line_total: (parseFloat(updated[index].quantity) || 1) * suggestion.default_unit_price,
@@ -218,24 +221,22 @@ const [expiryDate, setExpiryDate] = useState(getDefaultExpiry())
     const quoteItems = validItems.map(item => ({
       quote_id: quote.id,
       name: item.name,
+      description: item.description || '',
       item_type: item.item_type,
       quantity: parseFloat(item.quantity) || 1,
       unit_price: parseFloat(item.unit_price) || 0,
       line_total: item.line_total,
     }))
 
-    const newItemsToSave = validItems.filter(item => {
-      return !clients.some(c => c.name.toLowerCase() === item.name.toLowerCase())
-    })
-
     await Promise.all([
       supabase.from('quote_items').insert(quoteItems),
-      ...newItemsToSave.map(item =>
+      ...validItems.map(item =>
         supabase.from('items_directory').upsert({
           user_id: user.id,
           name: item.name.trim(),
           type: item.item_type,
           default_unit_price: parseFloat(item.unit_price) || 0,
+          description: item.description || '',
         }, { onConflict: 'user_id,name' })
       )
     ])
@@ -446,6 +447,16 @@ const [expiryDate, setExpiryDate] = useState(getDefaultExpiry())
                   </div>
 
                   <div className="mb-3">
+                    <input
+                      type="text"
+                      value={item.description}
+                      onChange={e => updateItem(index, 'description', e.target.value)}
+                      placeholder="Description (optional)"
+                      className="w-full px-3 py-2 rounded-lg border border-gray-200 focus:outline-none focus:ring-2 focus:ring-green-500 text-gray-900 text-sm"
+                    />
+                  </div>
+
+                  <div className="mb-3">
                     <select
                       value={item.item_type}
                       onChange={e => updateItem(index, 'item_type', e.target.value)}
@@ -587,7 +598,12 @@ const [expiryDate, setExpiryDate] = useState(getDefaultExpiry())
                   <tbody>
                     {items.filter(i => i.name).map((item, index) => (
                       <tr key={index} className="border-t border-gray-50">
-                        <td className="py-2 text-gray-900">{item.name}</td>
+                        <td className="py-2">
+                          <p className="text-gray-900">{item.name}</p>
+                          {item.description && (
+                            <p className="text-xs text-gray-400">{item.description}</p>
+                          )}
+                        </td>
                         <td className="py-2 text-right text-gray-600">{item.quantity}</td>
                         <td className="py-2 text-right text-gray-600">{currencySymbol}{parseFloat(item.unit_price).toFixed(2)}</td>
                         <td className="py-2 text-right text-gray-900 font-medium">{currencySymbol}{item.line_total.toFixed(2)}</td>
