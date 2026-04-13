@@ -8,6 +8,7 @@ import { countries } from '@/lib/countries'
 export default function OnboardingPage() {
   const [businessName, setBusinessName] = useState('')
   const [phone, setPhone] = useState('')
+  const [countryCode, setCountryCode] = useState('')
   const [country, setCountry] = useState('')
   const [currencyCode, setCurrencyCode] = useState('')
   const [currencySymbol, setCurrencySymbol] = useState('')
@@ -21,6 +22,7 @@ export default function OnboardingPage() {
   const handleCountryChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const selected = countries.find(c => c.code === e.target.value)
     if (selected) {
+      setCountryCode(selected.code)
       setCountry(selected.name)
       setCurrencyCode(selected.currency_code)
       setCurrencySymbol(selected.currency_symbol)
@@ -31,32 +33,33 @@ export default function OnboardingPage() {
     setLoading(true)
     setError('')
 
-    if (!businessName || !phone || !country) {
+    if (!businessName || !phone || !countryCode) {
       setError('Please fill in all required fields')
       setLoading(false)
       return
     }
 
-    const { data: { user } } = await supabase.auth.getUser()
+    const { data: { user }, error: userError } = await supabase.auth.getUser()
+
     if (!user) {
       router.push('/login')
       return
     }
 
-    const { error } = await supabase
+    const { error: updateError } = await supabase
       .from('profiles')
       .update({
         business_name: businessName,
-        phone,
-        country,
+        phone: phone,
+        country: country,
         currency_code: currencyCode,
         currency_symbol: currencySymbol,
         default_vat_rate: noVat ? 0 : parseFloat(vatRate) || 0,
       })
       .eq('id', user.id)
 
-    if (error) {
-      setError(error.message)
+    if (updateError) {
+      setError(updateError.message)
       setLoading(false)
     } else {
       router.push('/dashboard')
@@ -98,7 +101,7 @@ export default function OnboardingPage() {
             type="tel"
             value={phone}
             onChange={e => setPhone(e.target.value)}
-            className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-green-500 text-gray-900"
+            className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-green-500 text-gray.900"
             placeholder="+27 123 456 789"
           />
         </div>
@@ -108,6 +111,7 @@ export default function OnboardingPage() {
             Country <span className="text-red-500">*</span>
           </label>
           <select
+            value={countryCode}
             onChange={handleCountryChange}
             className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-green-500 text-gray-900 bg-white"
           >
