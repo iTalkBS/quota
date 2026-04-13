@@ -1,10 +1,83 @@
 'use client'
 
 import Link from 'next/link'
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
+import { createClient } from '@/lib/supabase'
+
+type Quote = {
+  id: string
+  quote_number: string
+  type: string
+  status: string
+  total: number
+  currency_symbol: string
+  issue_date: string
+  client_id: string
+}
+
+type Client = {
+  id: string
+  name: string
+}
 
 export default function DocumentsPage() {
   const [activeTab, setActiveTab] = useState<'quotes' | 'invoices'>('quotes')
+  const [quotes, setQuotes] = useState<Quote[]>([])
+  const [clients, setClients] = useState<Client[]>([])
+  const [search, setSearch] = useState('')
+  const [loading, setLoading] = useState(true)
+  const supabase = createClient()
+
+  useEffect(() => {
+    const loadData = async () => {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) return
+
+      const [{ data: quotesData }, { data: clientsData }] = await Promise.all([
+        supabase
+          .from('quotes')
+          .select('*')
+          .eq('user_id', user.id)
+          .order('created_at', { ascending: false }),
+        supabase
+          .from('clients')
+          .select('id, name')
+          .eq('user_id', user.id),
+      ])
+
+      if (quotesData) setQuotes(quotesData)
+      if (clientsData) setClients(clientsData)
+      setLoading(false)
+    }
+    loadData()
+  }, [])
+
+  const getClientName = (clientId: string) => {
+    const client = clients.find(c => c.id === clientId)
+    return client?.name || 'Unknown client'
+  }
+
+  const getStatusStyle = (status: string) => {
+    switch (status) {
+      case 'paid': return 'bg-green-100 text-green-700'
+      case 'unpaid': return 'bg-amber-100 text-amber-700'
+      case 'overdue': return 'bg-red-100 text-red-700'
+      case 'converted': return 'bg-purple-100 text-purple-700'
+      case 'sent': return 'bg-blue-100 text-blue-700'
+      case 'accepted': return 'bg-green-100 text-green-700'
+      case 'rejected': return 'bg-red-100 text-red-700'
+      default: return 'bg-gray-100 text-gray-600'
+    }
+  }
+
+  const filtered = quotes.filter(q => {
+    const matchesTab = activeTab === 'quotes' ? q.type === 'quote' : q.type === 'invoice'
+    const clientName = getClientName(q.client_id).toLowerCase()
+    const matchesSearch = search === '' ||
+      clientName.includes(search.toLowerCase()) ||
+      q.quote_number.toLowerCase().includes(search.toLowerCase())
+    return matchesTab && matchesSearch
+  })
 
   return (
     <div className="min-h-screen bg-gray-50 pb-24">
@@ -39,16 +112,50 @@ export default function DocumentsPage() {
         <div className="mb-4">
           <input
             type="text"
+            value={search}
+            onChange={e => setSearch(e.target.value)}
             placeholder="Search by client name or number..."
             className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-green-500 text-gray-900 bg-white"
           />
         </div>
 
-        <div className="bg-white rounded-2xl border border-gray-100 p-6 text-center">
-          <p className="text-gray-400 text-sm">
-            No {activeTab} yet
-          </p>
-        </div>
+        {loading ? (
+          <div className="bg-white rounded-2xl border border-gray-100 p-6 text-center">
+            <p className="text-gray-400 text-sm">Loading...</p>
+          </div>
+        ) : filtered.length === 0 ? (
+          <div className="bg-white rounded-2xl border border-gray-100 p-6 text-center">
+            <p className="text-gray-400 text-sm">No {activeTab} yet</p>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {filtered.map(quote => (
+              <Link
+                key={quote.id}
+                href={`/documents/${quote.id}`}
+                className="block bg-white border border-gray-100 rounded-2xl p-4"
+              >
+                <div className="flex justify-between items-start mb-2">
+                  <div>
+                    <p className="text-sm font-semibold text-gray-900">
+                      {getClientName(quote.client_id)}
+                    </p>
+                    <p className="text-xs text-gray-400">{quote.quote_number}</p>
+                  </div>
+                  <span className={`text-xs font-medium px-2 py-1 rounded-full ${getStatusStyle(quote.status)}`}>
+                    {quote.status.toUpperCase()}
+                  </span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <p className="text-xs text-gray-400">{quote.issue_date}</p>
+                  <p className="text-sm font-bold text-gray-900">
+                    {quote.currency_symbol} {Number(quote.total).toFixed(2)}
+                  </p>
+                </div>
+              </Link>
+            ))}
+          </div>
+        )}
       </div>
 
       <Link

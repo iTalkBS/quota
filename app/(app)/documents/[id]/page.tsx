@@ -247,6 +247,13 @@ export default function QuoteDetailPage({ params }: { params: { id: string } }) 
         </div>
 
         <div className="space-y-3">
+          <button
+            onClick={() => window.open(`/api/pdf?id=${quote.id}`, '_blank')}
+            className="w-full bg-gray-800 text-white py-3 rounded-xl font-medium text-base"
+          >
+            Download PDF
+          </button>
+
           {client?.phone && (
             <button
               onClick={handleWhatsApp}
