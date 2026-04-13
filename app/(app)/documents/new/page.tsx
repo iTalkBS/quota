@@ -5,60 +5,32 @@ import { createClient } from '@/lib/supabase'
 import { useRouter } from 'next/navigation'
 import { countries } from '@/lib/countries'
 
-type Client = {
-  id: string
-  name: string
-  email: string
-  phone: string
-  address: string
-}
-
-type Item = {
-  name: string
-  description: string
-  item_type: 'product' | 'service'
-  quantity: string
-  unit_price: string
-  line_total: number
-}
-
-type Profile = {
-  business_name: string
-  currency_code: string
-  currency_symbol: string
-  default_vat_rate: number
-  phone: string
-  email: string
-  address: string
-}
+type Client = { id: string; name: string; email: string; phone: string; address: string }
+type Item = { name: string; description: string; item_type: 'product' | 'service'; quantity: string; unit_price: string; line_total: number }
+type Profile = { business_name: string; currency_code: string; currency_symbol: string; default_vat_rate: number; phone: string; email: string; address: string }
 
 export default function NewQuotePage() {
   const router = useRouter()
   const supabase = createClient()
   const [step, setStep] = useState(1)
   const [profile, setProfile] = useState<Profile | null>(null)
-
   const [clients, setClients] = useState<Client[]>([])
   const [clientSearch, setClientSearch] = useState('')
   const [selectedClient, setSelectedClient] = useState<Client | null>(null)
   const [newClient, setNewClient] = useState({ name: '', email: '', phone: '', address: '' })
   const [isNewClient, setIsNewClient] = useState(false)
-
-  const [items, setItems] = useState<Item[]>([{ name: '', description: '', item_type: 'product', quantity: '', unit_price: '', line_total: 0 }])
+  const [items, setItems] = useState<Item[]>([{ name: '', description: '', item_type: 'product', quantity: '1', unit_price: '', line_total: 0 }])
   const [currencyCode, setCurrencyCode] = useState('USD')
   const [currencySymbol, setCurrencySymbol] = useState('$')
   const [vatRate, setVatRate] = useState(0)
   const [vatEnabled, setVatEnabled] = useState(false)
   const [notes, setNotes] = useState('')
   const [issueDate, setIssueDate] = useState(new Date().toISOString().split('T')[0])
-
-  const getDefaultExpiry = () => {
-    const date = new Date()
-    date.setDate(date.getDate() + 7)
-    return date.toISOString().split('T')[0]
-  }
-  const [expiryDate, setExpiryDate] = useState(getDefaultExpiry())
-
+  const [expiryDate, setExpiryDate] = useState(() => {
+    const d = new Date()
+    d.setDate(d.getDate() + 7)
+    return d.toISOString().split('T')[0]
+  })
   const [itemSuggestions, setItemSuggestions] = useState<any[]>([])
   const [activeItemIndex, setActiveItemIndex] = useState<number | null>(null)
   const [loading, setLoading] = useState(false)
@@ -68,27 +40,17 @@ export default function NewQuotePage() {
     const loadData = async () => {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) return
-
-      const { data: profileData } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('id', user.id)
-        .single()
-
-      if (profileData) {
-        setProfile(profileData)
-        setCurrencyCode(profileData.currency_code || 'USD')
-        setCurrencySymbol(profileData.currency_symbol || '$')
-        setVatRate(profileData.default_vat_rate || 0)
+      const [{ data: p }, { data: c }] = await Promise.all([
+        supabase.from('profiles').select('*').eq('id', user.id).single(),
+        supabase.from('clients').select('*').eq('user_id', user.id).order('name'),
+      ])
+      if (p) {
+        setProfile(p)
+        setCurrencyCode(p.currency_code || 'USD')
+        setCurrencySymbol(p.currency_symbol || '$')
+        setVatRate(p.default_vat_rate || 0)
       }
-
-      const { data: clientsData } = await supabase
-        .from('clients')
-        .select('*')
-        .eq('user_id', user.id)
-        .order('name')
-
-      if (clientsData) setClients(clientsData)
+      if (c) setClients(c)
     }
     loadData()
   }, [])
@@ -108,16 +70,7 @@ export default function NewQuotePage() {
     setItems(updated)
   }
 
-  const addItem = () => {
-    setItems([...items, { name: '', description: '', item_type: 'product', quantity: '', unit_price: '', line_total: 0 }])
-  }
-
-  const removeItem = (index: number) => {
-    if (items.length === 1) return
-    setItems(items.filter((_, i) => i !== index))
-  }
-
-  const subtotal = items.reduce((sum, item) => sum + item.line_total, 0)
+  const subtotal = items.reduce((sum, i) => sum + i.line_total, 0)
   const vatAmount = vatEnabled ? (subtotal * vatRate) / 100 : 0
   const total = subtotal + vatAmount
 
@@ -137,13 +90,12 @@ export default function NewQuotePage() {
 
   const selectSuggestedItem = (suggestion: any, index: number) => {
     const updated = [...items]
-    const price = suggestion.default_unit_price.toString()
     updated[index] = {
       ...updated[index],
       name: suggestion.name,
       description: suggestion.description || '',
       item_type: suggestion.type,
-      unit_price: price,
+      unit_price: suggestion.default_unit_price.toString(),
       line_total: (parseFloat(updated[index].quantity) || 1) * suggestion.default_unit_price,
     }
     setItems(updated)
@@ -162,24 +114,22 @@ export default function NewQuotePage() {
   const handleSubmit = async () => {
     setLoading(true)
     setError('')
-
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return
 
     let clientId = selectedClient?.id
-
     if (isNewClient) {
       if (!newClient.name || !newClient.phone) {
         setError('Client name and phone are required')
         setLoading(false)
         return
       }
-      const { data: savedClient } = await supabase
+      const { data: saved } = await supabase
         .from('clients')
         .insert({ ...newClient, user_id: user.id })
         .select()
         .single()
-      if (savedClient) clientId = savedClient.id
+      if (saved) clientId = saved.id
     }
 
     const { count } = await supabase
@@ -190,7 +140,7 @@ export default function NewQuotePage() {
 
     const quoteNumber = `QUO-${new Date().getFullYear()}-${String((count || 0) + 1).padStart(4, '0')}`
 
-    const { data: quote, error: quoteError } = await supabase
+    const { data: quote, error: qe } = await supabase
       .from('quotes')
       .insert({
         user_id: user.id,
@@ -211,32 +161,28 @@ export default function NewQuotePage() {
       .select()
       .single()
 
-    if (quoteError) {
-      setError(quoteError.message)
-      setLoading(false)
-      return
-    }
+    if (qe) { setError(qe.message); setLoading(false); return }
 
-    const validItems = items.filter(item => item.name)
-    const quoteItems = validItems.map(item => ({
-      quote_id: quote.id,
-      name: item.name,
-      description: item.description || '',
-      item_type: item.item_type,
-      quantity: parseFloat(item.quantity) || 1,
-      unit_price: parseFloat(item.unit_price) || 0,
-      line_total: item.line_total,
-    }))
-
+    const validItems = items.filter(i => i.name)
     await Promise.all([
-      supabase.from('quote_items').insert(quoteItems),
-      ...validItems.map(item =>
+      supabase.from('quote_items').insert(
+        validItems.map(i => ({
+          quote_id: quote.id,
+          name: i.name,
+          description: i.description || '',
+          item_type: i.item_type,
+          quantity: parseFloat(i.quantity) || 1,
+          unit_price: parseFloat(i.unit_price) || 0,
+          line_total: i.line_total,
+        }))
+      ),
+      ...validItems.map(i =>
         supabase.from('items_directory').upsert({
           user_id: user.id,
-          name: item.name.trim(),
-          type: item.item_type,
-          default_unit_price: parseFloat(item.unit_price) || 0,
-          description: item.description || '',
+          name: i.name.trim(),
+          type: i.item_type,
+          default_unit_price: parseFloat(i.unit_price) || 0,
+          description: i.description || '',
         }, { onConflict: 'user_id,name' })
       )
     ])
@@ -247,127 +193,117 @@ export default function NewQuotePage() {
 
   const stepOneValid = selectedClient || (isNewClient && newClient.name && newClient.phone)
   const stepTwoValid = items.some(i => i.name && parseFloat(i.quantity) > 0 && parseFloat(i.unit_price) > 0)
-
-  const uniqueCurrencies = Array.from(
-    new Map(countries.map(c => [c.currency_code, c])).values()
-  )
+  const uniqueCurrencies = Array.from(new Map(countries.map(c => [c.currency_code, c])).values())
 
   return (
-    <div className="min-h-screen bg-gray-50 pb-10">
-      <div className="bg-white border-b border-gray-100 px-6 py-4 flex items-center gap-4">
-        <button onClick={() => step > 1 ? setStep(step - 1) : router.back()} className="text-gray-500 text-lg">←</button>
-        <div>
-          <h1 className="text-lg font-bold text-gray-900">New Quote</h1>
-          <p className="text-xs text-gray-400">Step {step} of 3</p>
+    <div className="q-page">
+      <div className="q-topbar">
+        <button className="q-back-btn" onClick={() => step > 1 ? setStep(step - 1) : router.back()}>
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+            <path d="M9 2L4 7l5 5" stroke="#6c47ff" strokeWidth="2" strokeLinecap="round"/>
+          </svg>
+        </button>
+        <div className="q-topbar-title">New Quote</div>
+        <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text3)' }}>Step {step}/3</div>
+      </div>
+
+      <div style={{ padding: '14px 16px 0' }}>
+        <div className="q-progress-bar">
+          {[1,2,3].map(s => (
+            <div key={s} className={`q-progress-step ${s <= step ? 'active' : ''}`}/>
+          ))}
         </div>
       </div>
 
-      <div className="flex px-6 pt-4 gap-2 mb-6">
-        {[1,2,3].map(s => (
-          <div key={s} className={`flex-1 h-1 rounded-full ${s <= step ? 'bg-green-600' : 'bg-gray-200'}`} />
-        ))}
-      </div>
-
-      <div className="px-6">
+      <div className="q-scroll">
         {step === 1 && (
           <div>
-            <h2 className="text-base font-semibold text-gray-900 mb-4">Client details</h2>
+            <div style={{ fontSize: 16, fontWeight: 800, color: 'var(--text)', marginBottom: 16 }}>Client details</div>
 
             {!isNewClient && (
               <>
-                <input
-                  type="text"
-                  value={clientSearch}
-                  onChange={e => setClientSearch(e.target.value)}
-                  placeholder="Search existing clients..."
-                  className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-green-500 text-gray-900 bg-white mb-3"
-                />
+                <div className="q-search" style={{ marginBottom: 12 }}>
+                  <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                    <circle cx="6.5" cy="6.5" r="5" stroke="#a8a5c0" strokeWidth="1.5"/>
+                    <path d="M11 11l3 3" stroke="#a8a5c0" strokeWidth="1.5" strokeLinecap="round"/>
+                  </svg>
+                  <input
+                    value={clientSearch}
+                    onChange={e => setClientSearch(e.target.value)}
+                    placeholder="Search existing clients..."
+                  />
+                  {clientSearch && (
+                    <button
+                      onClick={() => { setClientSearch(''); setSelectedClient(null) }}
+                      style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text3)', fontSize: 18, lineHeight: 1, padding: 0 }}
+                    >×</button>
+                  )}
+                </div>
 
                 {clientSearch && filteredClients.length > 0 && (
-                  <div className="bg-white border border-gray-200 rounded-xl mb-3 overflow-hidden">
+                  <div style={{ background: 'var(--white)', border: '1.5px solid var(--border2)', borderRadius: 'var(--radius-sm)', marginBottom: 12, overflow: 'hidden', boxShadow: 'var(--shadow)' }}>
                     {filteredClients.map(c => (
                       <button
                         key={c.id}
                         onClick={() => { setSelectedClient(c); setClientSearch(c.name) }}
-                        className="w-full text-left px-4 py-3 border-b border-gray-100 last:border-0"
+                        style={{ width: '100%', textAlign: 'left', padding: '12px 16px', borderBottom: '1px solid var(--border)', background: 'none', border: 'none', cursor: 'pointer', display: 'block' }}
                       >
-                        <p className="text-sm font-medium text-gray-900">{c.name}</p>
-                        <p className="text-xs text-gray-500">{c.phone}</p>
+                        <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text)' }}>{c.name}</div>
+                        <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 2 }}>{c.phone}</div>
                       </button>
                     ))}
                   </div>
                 )}
 
                 {selectedClient && (
-                  <div className="bg-green-50 border border-green-100 rounded-xl p-4 mb-4">
-                    <p className="text-sm font-medium text-green-800">{selectedClient.name}</p>
-                    <p className="text-xs text-green-600">{selectedClient.phone}</p>
-                    {selectedClient.email && <p className="text-xs text-green-600">{selectedClient.email}</p>}
-                    <button
-                      onClick={() => { setSelectedClient(null); setClientSearch('') }}
-                      className="text-xs text-red-400 mt-2 underline"
-                    >
-                      Remove
-                    </button>
+                  <div style={{ background: 'var(--green-bg)', border: '1px solid rgba(0,194,122,0.2)', borderRadius: 'var(--radius-sm)', padding: 14, marginBottom: 12 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                      <div>
+                        <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--green)' }}>{selectedClient.name}</div>
+                        <div style={{ fontSize: 12, color: 'var(--green)', opacity: 0.8, marginTop: 2 }}>{selectedClient.phone}</div>
+                      </div>
+                      <button
+                        onClick={() => { setSelectedClient(null); setClientSearch('') }}
+                        style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--green)', fontSize: 18, lineHeight: 1, padding: 0 }}
+                      >×</button>
+                    </div>
                   </div>
                 )}
 
                 <button
                   onClick={() => setIsNewClient(true)}
-                  className="w-full border border-dashed border-gray-300 text-gray-500 py-3 rounded-xl text-sm"
+                  style={{ width: '100%', background: 'none', border: '2px dashed var(--border2)', borderRadius: 'var(--radius-sm)', padding: 14, fontSize: 14, fontWeight: 600, color: 'var(--purple)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}
                 >
-                  + Add new client
+                  <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M8 2v12M2 8h12" stroke="#6c47ff" strokeWidth="2" strokeLinecap="round"/></svg>
+                  Add new client
                 </button>
               </>
             )}
 
             {isNewClient && (
-              <div className="space-y-3">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Name <span className="text-red-500">*</span></label>
-                  <input
-                    type="text"
-                    value={newClient.name}
-                    onChange={e => setNewClient({ ...newClient, name: e.target.value })}
-                    className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-green-500 text-gray-900"
-                    placeholder="Client name"
-                  />
+              <div className="q-card" style={{ padding: 20 }}>
+                <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--purple)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 14 }}>New client</div>
+                <div className="q-form-group">
+                  <label className="q-label">Name <span style={{ color: 'var(--red)' }}>*</span></label>
+                  <input className="q-input" value={newClient.name} onChange={e => setNewClient({ ...newClient, name: e.target.value })} placeholder="Client name"/>
                 </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Phone <span className="text-red-500">*</span></label>
-                  <input
-                    type="tel"
-                    value={newClient.phone}
-                    onChange={e => setNewClient({ ...newClient, phone: e.target.value })}
-                    className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-green-500 text-gray-900"
-                    placeholder="+27 123 456 789"
-                  />
+                <div className="q-form-group">
+                  <label className="q-label">Phone <span style={{ color: 'var(--red)' }}>*</span></label>
+                  <input className="q-input" type="tel" value={newClient.phone} onChange={e => setNewClient({ ...newClient, phone: e.target.value })} placeholder="+27 123 456 789"/>
                 </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
-                  <input
-                    type="email"
-                    value={newClient.email}
-                    onChange={e => setNewClient({ ...newClient, email: e.target.value })}
-                    className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-green-500 text-gray-900"
-                    placeholder="client@example.com"
-                  />
+                <div className="q-form-group">
+                  <label className="q-label">Email</label>
+                  <input className="q-input" type="email" value={newClient.email} onChange={e => setNewClient({ ...newClient, email: e.target.value })} placeholder="client@example.com"/>
                 </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Address</label>
-                  <input
-                    type="text"
-                    value={newClient.address}
-                    onChange={e => setNewClient({ ...newClient, address: e.target.value })}
-                    className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-green-500 text-gray-900"
-                    placeholder="Client address"
-                  />
+                <div className="q-form-group">
+                  <label className="q-label">Address</label>
+                  <input className="q-input" value={newClient.address} onChange={e => setNewClient({ ...newClient, address: e.target.value })} placeholder="Client address"/>
                 </div>
                 <button
                   onClick={() => { setIsNewClient(false); setSelectedClient(null); setClientSearch('') }}
-                  className="text-sm text-gray-500 underline"
+                  style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 13, color: 'var(--purple)', fontWeight: 600, padding: 0 }}
                 >
-                  Search existing clients instead
+                  ← Search existing clients instead
                 </button>
               </div>
             )}
@@ -375,284 +311,238 @@ export default function NewQuotePage() {
             <button
               onClick={() => setStep(2)}
               disabled={!stepOneValid}
-              className="w-full bg-green-600 text-white py-3 rounded-xl font-medium text-base disabled:opacity-50 mt-6"
+              className="q-btn-primary"
+              style={{ marginTop: 20 }}
             >
-              Next
+              Next → Items
             </button>
           </div>
         )}
 
         {step === 2 && (
           <div>
-            <h2 className="text-base font-semibold text-gray-900 mb-4">Items</h2>
+            <div style={{ fontSize: 16, fontWeight: 800, color: 'var(--text)', marginBottom: 16 }}>Items and pricing</div>
 
-            <div className="flex gap-3 mb-4">
-              <div className="flex-1">
-                <label className="block text-xs font-medium text-gray-500 mb-1">Currency</label>
-                <select
-                  value={currencyCode}
-                  onChange={handleCurrencyChange}
-                  className="w-full px-3 py-2 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-green-500 text-gray-900 bg-white text-sm"
-                >
+            <div style={{ display: 'flex', gap: 10, marginBottom: 16 }}>
+              <div style={{ flex: 1 }}>
+                <label className="q-label">Currency</label>
+                <select className="q-select" value={currencyCode} onChange={handleCurrencyChange}>
                   {uniqueCurrencies.map(c => (
-                    <option key={c.currency_code} value={c.currency_code}>
-                      {c.currency_code} ({c.currency_symbol})
-                    </option>
+                    <option key={c.currency_code} value={c.currency_code}>{c.currency_code} ({c.currency_symbol})</option>
                   ))}
                 </select>
               </div>
-              <div className="flex-1">
-                <label className="block text-xs font-medium text-gray-500 mb-1">VAT</label>
+              <div style={{ flex: 1 }}>
+                <label className="q-label">VAT</label>
                 <button
                   onClick={() => setVatEnabled(!vatEnabled)}
-                  className={`w-full px-4 py-2 rounded-xl border text-sm font-medium ${vatEnabled ? 'bg-green-50 border-green-200 text-green-700' : 'bg-white border-gray-200 text-gray-500'}`}
+                  style={{ width: '100%', padding: '13px 14px', borderRadius: 'var(--radius-xs)', border: '1.5px solid', fontSize: 14, fontWeight: 600, cursor: 'pointer', transition: 'all 0.15s', background: vatEnabled ? 'var(--purple-bg)' : 'var(--bg)', borderColor: vatEnabled ? 'var(--purple)' : 'var(--border2)', color: vatEnabled ? 'var(--purple)' : 'var(--text3)' }}
                 >
-                  {vatEnabled ? `VAT ${vatRate}% on` : 'VAT off'}
+                  {vatEnabled ? `VAT ${vatRate}%` : 'VAT off'}
                 </button>
               </div>
             </div>
 
-            <div className="space-y-4 mb-4">
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginBottom: 12 }}>
               {items.map((item, index) => (
-                <div key={index} className="bg-white border border-gray-200 rounded-xl p-4">
-                  <div className="flex justify-between items-center mb-3">
-                    <span className="text-xs font-medium text-gray-500">Item {index + 1}</span>
+                <div key={index} className="q-card" style={{ padding: 16 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+                    <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Item {index + 1}</div>
                     {items.length > 1 && (
-                      <button onClick={() => removeItem(index)} className="text-red-400 text-xs">Remove</button>
+                      <button
+                        onClick={() => setItems(items.filter((_, i) => i !== index))}
+                        style={{ background: 'var(--red-bg)', border: 'none', cursor: 'pointer', color: 'var(--red)', fontSize: 12, fontWeight: 600, padding: '4px 10px', borderRadius: 6 }}
+                      >
+                        Remove
+                      </button>
                     )}
                   </div>
 
-                  <div className="mb-3 relative">
+                  <div style={{ position: 'relative', marginBottom: 10 }}>
                     <input
-                      type="text"
+                      className="q-input"
                       value={item.name}
                       onChange={e => { updateItem(index, 'name', e.target.value); searchItems(e.target.value, index) }}
                       placeholder="Item name"
-                      className="w-full px-3 py-2 rounded-lg border border-gray-200 focus:outline-none focus:ring-2 focus:ring-green-500 text-gray-900 text-sm"
                     />
                     {activeItemIndex === index && itemSuggestions.length > 0 && (
-                      <div className="absolute z-10 w-full bg-white border border-gray-200 rounded-xl mt-1 overflow-hidden shadow-sm">
+                      <div className="q-suggestion-list">
                         {itemSuggestions.map((s, i) => (
-                          <button
-                            key={i}
-                            onClick={() => selectSuggestedItem(s, index)}
-                            className="w-full text-left px-3 py-2 border-b border-gray-100 last:border-0 text-sm"
-                          >
-                            <span className="font-medium text-gray-900">{s.name}</span>
-                            <span className="text-gray-400 ml-2">{currencySymbol}{s.default_unit_price}</span>
+                          <button key={i} className="q-suggestion-item" onClick={() => selectSuggestedItem(s, index)}>
+                            <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)' }}>{s.name}</div>
+                            <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 2 }}>{currencySymbol}{s.default_unit_price}</div>
                           </button>
                         ))}
                       </div>
                     )}
                   </div>
 
-                  <div className="mb-3">
-                    <input
-                      type="text"
-                      value={item.description}
-                      onChange={e => updateItem(index, 'description', e.target.value)}
-                      placeholder="Description (optional)"
-                      className="w-full px-3 py-2 rounded-lg border border-gray-200 focus:outline-none focus:ring-2 focus:ring-green-500 text-gray-900 text-sm"
-                    />
-                  </div>
+                  <input
+                    className="q-input"
+                    style={{ marginBottom: 10 }}
+                    value={item.description}
+                    onChange={e => updateItem(index, 'description', e.target.value)}
+                    placeholder="Description (optional)"
+                  />
 
-                  <div className="mb-3">
-                    <select
-                      value={item.item_type}
-                      onChange={e => updateItem(index, 'item_type', e.target.value)}
-                      className="w-full px-3 py-2 rounded-lg border border-gray-200 focus:outline-none focus:ring-2 focus:ring-green-500 text-gray-900 text-sm bg-white"
-                    >
-                      <option value="product">Product</option>
-                      <option value="service">Service</option>
-                    </select>
-                  </div>
+                  <select
+                    className="q-select"
+                    style={{ marginBottom: 10 }}
+                    value={item.item_type}
+                    onChange={e => updateItem(index, 'item_type', e.target.value)}
+                  >
+                    <option value="product">Product</option>
+                    <option value="service">Service</option>
+                  </select>
 
-                  <div className="grid grid-cols-2 gap-2 mb-2">
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 10 }}>
                     <div>
-                      <label className="block text-xs text-gray-500 mb-1">Quantity</label>
+                      <label className="q-label">Quantity</label>
                       <input
+                        className="q-input"
                         type="number"
                         value={item.quantity}
                         onChange={e => updateItem(index, 'quantity', e.target.value)}
                         onFocus={e => e.target.select()}
-                        className="w-full px-3 py-2 rounded-lg border border-gray-200 focus:outline-none focus:ring-2 focus:ring-green-500 text-gray-900 text-sm"
-                        placeholder="0"
+                        placeholder="1"
                         min="0"
                       />
                     </div>
                     <div>
-                      <label className="block text-xs text-gray-500 mb-1">Unit price</label>
+                      <label className="q-label">Unit price</label>
                       <input
+                        className="q-input"
                         type="number"
                         value={item.unit_price}
                         onChange={e => updateItem(index, 'unit_price', e.target.value)}
                         onFocus={e => e.target.select()}
-                        className="w-full px-3 py-2 rounded-lg border border-gray-200 focus:outline-none focus:ring-2 focus:ring-green-500 text-gray-900 text-sm"
                         placeholder="0.00"
                         min="0"
                       />
                     </div>
                   </div>
 
-                  <div className="text-right text-sm font-medium text-gray-900">
-                    {currencySymbol} {item.line_total.toFixed(2)}
+                  <div style={{ textAlign: 'right', fontSize: 15, fontWeight: 800, color: 'var(--purple)' }}>
+                    {currencySymbol} {item.line_total.toLocaleString()}
                   </div>
                 </div>
               ))}
             </div>
 
             <button
-              onClick={addItem}
-              className="w-full border border-dashed border-gray-300 text-gray-500 py-3 rounded-xl text-sm mb-4"
+              onClick={() => setItems([...items, { name: '', description: '', item_type: 'product', quantity: '1', unit_price: '', line_total: 0 }])}
+              style={{ width: '100%', background: 'none', border: '2px dashed var(--border2)', borderRadius: 'var(--radius-sm)', padding: 14, fontSize: 14, fontWeight: 600, color: 'var(--purple)', cursor: 'pointer', marginBottom: 16, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}
             >
-              + Add another item
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M8 2v12M2 8h12" stroke="#6c47ff" strokeWidth="2" strokeLinecap="round"/></svg>
+              Add another item
             </button>
 
-            <div className="bg-white border border-gray-200 rounded-xl p-4 mb-4">
-              <div className="flex justify-between text-sm text-gray-600 mb-1">
-                <span>Subtotal</span>
-                <span>{currencySymbol} {subtotal.toFixed(2)}</span>
+            <div className="q-card" style={{ padding: 16, marginBottom: 16 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, color: 'var(--text2)', marginBottom: 8 }}>
+                <span>Subtotal</span><span>{currencySymbol} {subtotal.toLocaleString()}</span>
               </div>
               {vatEnabled && (
-                <div className="flex justify-between text-sm text-gray-600 mb-1">
-                  <span>VAT ({vatRate}%)</span>
-                  <span>{currencySymbol} {vatAmount.toFixed(2)}</span>
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, color: 'var(--text2)', marginBottom: 8 }}>
+                  <span>VAT ({vatRate}%)</span><span>{currencySymbol} {vatAmount.toLocaleString()}</span>
                 </div>
               )}
-              <div className="flex justify-between text-base font-bold text-gray-900 border-t border-gray-100 pt-2 mt-2">
-                <span>Total</span>
-                <span>{currencySymbol} {total.toFixed(2)}</span>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 17, fontWeight: 800, color: 'var(--text)', borderTop: '1px solid var(--border)', paddingTop: 10, marginTop: 4 }}>
+                <span>Total</span><span>{currencySymbol} {total.toLocaleString()}</span>
               </div>
             </div>
 
-            <button
-              onClick={() => setStep(3)}
-              disabled={!stepTwoValid}
-              className="w-full bg-green-600 text-white py-3 rounded-xl font-medium text-base disabled:opacity-50"
-            >
-              Next
+            <button onClick={() => setStep(3)} disabled={!stepTwoValid} className="q-btn-primary">
+              Next → Review
             </button>
           </div>
         )}
 
         {step === 3 && (
           <div>
-            <h2 className="text-base font-semibold text-gray-900 mb-4">Review quote</h2>
+            <div style={{ fontSize: 16, fontWeight: 800, color: 'var(--text)', marginBottom: 16 }}>Review quote</div>
 
-            <div className="bg-white border border-gray-200 rounded-xl p-4 mb-4">
-              <div className="flex justify-between items-start mb-4">
+            <div className="q-card" style={{ padding: 20, marginBottom: 12 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 14 }}>
                 <div>
-                  <p className="text-lg font-bold text-gray-900">{profile?.business_name}</p>
-                  <p className="text-xs text-gray-500">{profile?.phone}</p>
-                  <p className="text-xs text-gray-500">{profile?.email}</p>
+                  <div style={{ fontSize: 16, fontWeight: 800, color: 'var(--text)' }}>{profile?.business_name}</div>
+                  {profile?.phone && <div style={{ fontSize: 12, color: 'var(--text3)', marginTop: 2 }}>{profile.phone}</div>}
                 </div>
-                <span className="bg-green-100 text-green-700 text-xs font-bold px-3 py-1 rounded-full">QUOTE</span>
+                <span style={{ fontSize: 11, fontWeight: 800, padding: '6px 12px', borderRadius: 20, background: 'var(--purple-bg)', color: 'var(--purple)' }}>QUOTATION</span>
               </div>
 
-              <div className="border-t border-gray-100 pt-3 mb-3">
-                <p className="text-xs text-gray-500 mb-1">Bill to</p>
-                <p className="text-sm font-medium text-gray-900">
-                  {selectedClient?.name || newClient.name}
-                </p>
-                <p className="text-xs text-gray-500">
-                  {selectedClient?.phone || newClient.phone}
-                </p>
-                {(selectedClient?.email || newClient.email) && (
-                  <p className="text-xs text-gray-500">{selectedClient?.email || newClient.email}</p>
-                )}
+              <div className="q-divider"/>
+
+              <div style={{ marginBottom: 14 }}>
+                <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 6 }}>Bill to</div>
+                <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--text)' }}>{selectedClient?.name || newClient.name}</div>
+                <div style={{ fontSize: 12, color: 'var(--text3)', marginTop: 2 }}>{selectedClient?.phone || newClient.phone}</div>
               </div>
 
-              <div className="border-t border-gray-100 pt-3 mb-3">
-                <div className="flex gap-4 mb-3">
-                  <div>
-                    <label className="block text-xs text-gray-500 mb-1">Issue date</label>
-                    <input
-                      type="date"
-                      value={issueDate}
-                      onChange={e => setIssueDate(e.target.value)}
-                      className="px-3 py-2 rounded-lg border border-gray-200 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-green-500"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs text-gray-500 mb-1">Expiry date</label>
-                    <input
-                      type="date"
-                      value={expiryDate}
-                      onChange={e => setExpiryDate(e.target.value)}
-                      className="px-3 py-2 rounded-lg border border-gray-200 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-green-500"
-                    />
-                  </div>
+              <div style={{ display: 'flex', gap: 16, marginBottom: 14 }}>
+                <div>
+                  <label className="q-label">Issue date</label>
+                  <input className="q-input" type="date" value={issueDate} onChange={e => setIssueDate(e.target.value)} style={{ fontSize: 13 }}/>
+                </div>
+                <div>
+                  <label className="q-label">Expiry date</label>
+                  <input className="q-input" type="date" value={expiryDate} onChange={e => setExpiryDate(e.target.value)} style={{ fontSize: 13 }}/>
                 </div>
               </div>
 
-              <div className="border-t border-gray-100 pt-3 mb-3">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="text-xs text-gray-500">
-                      <th className="text-left pb-2">Item</th>
-                      <th className="text-right pb-2">Qty</th>
-                      <th className="text-right pb-2">Price</th>
-                      <th className="text-right pb-2">Total</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {items.filter(i => i.name).map((item, index) => (
-                      <tr key={index} className="border-t border-gray-50">
-                        <td className="py-2">
-                          <p className="text-gray-900">{item.name}</p>
-                          {item.description && (
-                            <p className="text-xs text-gray-400">{item.description}</p>
-                          )}
-                        </td>
-                        <td className="py-2 text-right text-gray-600">{item.quantity}</td>
-                        <td className="py-2 text-right text-gray-600">{currencySymbol}{parseFloat(item.unit_price).toFixed(2)}</td>
-                        <td className="py-2 text-right text-gray-900 font-medium">{currencySymbol}{item.line_total.toFixed(2)}</td>
-                      </tr>
+              <div className="q-divider"/>
+
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+                <thead>
+                  <tr>
+                    {['Item', 'Qty', 'Price', 'Total'].map((h, i) => (
+                      <th key={h} style={{ textAlign: i === 0 ? 'left' : 'right', padding: '6px 0', fontSize: 11, fontWeight: 700, color: 'var(--text3)', textTransform: 'uppercase' }}>{h}</th>
                     ))}
-                  </tbody>
-                </table>
-              </div>
+                  </tr>
+                </thead>
+                <tbody>
+                  {items.filter(i => i.name).map((item, index) => (
+                    <tr key={index} style={{ borderTop: '1px solid var(--border)' }}>
+                      <td style={{ padding: '8px 0' }}>
+                        <div style={{ fontWeight: 600, color: 'var(--text)' }}>{item.name}</div>
+                        {item.description && <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 2 }}>{item.description}</div>}
+                      </td>
+                      <td style={{ textAlign: 'right', padding: '8px 0', color: 'var(--text2)' }}>{item.quantity}</td>
+                      <td style={{ textAlign: 'right', padding: '8px 0', color: 'var(--text2)' }}>{currencySymbol}{parseFloat(item.unit_price).toLocaleString()}</td>
+                      <td style={{ textAlign: 'right', padding: '8px 0', fontWeight: 700, color: 'var(--text)' }}>{currencySymbol}{item.line_total.toLocaleString()}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
 
-              <div className="border-t border-gray-100 pt-3">
-                <div className="flex justify-between text-sm text-gray-600 mb-1">
-                  <span>Subtotal</span>
-                  <span>{currencySymbol} {subtotal.toFixed(2)}</span>
+              <div style={{ marginTop: 14 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, color: 'var(--text2)', marginBottom: 6 }}>
+                  <span>Subtotal</span><span>{currencySymbol} {subtotal.toLocaleString()}</span>
                 </div>
                 {vatEnabled && (
-                  <div className="flex justify-between text-sm text-gray-600 mb-1">
-                    <span>VAT ({vatRate}%)</span>
-                    <span>{currencySymbol} {vatAmount.toFixed(2)}</span>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, color: 'var(--text2)', marginBottom: 6 }}>
+                    <span>VAT ({vatRate}%)</span><span>{currencySymbol} {vatAmount.toLocaleString()}</span>
                   </div>
                 )}
-                <div className="flex justify-between text-base font-bold text-gray-900 border-t border-gray-100 pt-2 mt-1">
-                  <span>Total</span>
-                  <span>{currencySymbol} {total.toFixed(2)}</span>
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 16, fontWeight: 800, color: 'var(--text)', borderTop: '1px solid var(--border)', paddingTop: 10, marginTop: 4 }}>
+                  <span>Total</span><span>{currencySymbol} {total.toLocaleString()}</span>
                 </div>
               </div>
             </div>
 
-            <div className="mb-4">
-              <label className="block text-sm font-medium text-gray-700 mb-1">Notes (optional)</label>
+            <div className="q-form-group">
+              <label className="q-label">Notes (optional)</label>
               <textarea
+                className="q-textarea"
+                rows={3}
                 value={notes}
                 onChange={e => setNotes(e.target.value)}
-                rows={3}
-                className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-green-500 text-gray-900 text-sm"
                 placeholder="Any additional notes for the client..."
               />
             </div>
 
-            {error && (
-              <div className="mb-4 p-3 bg-red-50 border border-red-100 rounded-xl text-red-600 text-sm">
-                {error}
-              </div>
-            )}
+            {error && <div className="q-error">{error}</div>}
 
-            <button
-              onClick={handleSubmit}
-              disabled={loading}
-              className="w-full bg-green-600 text-white py-3 rounded-xl font-medium text-base disabled:opacity-50"
-            >
+            <button onClick={handleSubmit} disabled={loading} className="q-btn-primary">
               {loading ? 'Saving...' : 'Save quote'}
             </button>
           </div>

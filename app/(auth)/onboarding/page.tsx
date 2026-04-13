@@ -29,138 +29,90 @@ export default function OnboardingPage() {
     }
   }
 
+  const isValid = businessName && phone && countryCode
+
   const handleSubmit = async () => {
+    if (!isValid) { setError('Please fill in all required fields'); return }
     setLoading(true)
     setError('')
-
-    if (!businessName || !phone || !countryCode) {
-      setError('Please fill in all required fields')
-      setLoading(false)
-      return
-    }
-
     const { data: { user } } = await supabase.auth.getUser()
-
-    if (!user) {
-      router.push('/login')
-      return
-    }
-
-    const { error: updateError } = await supabase
-      .from('profiles')
-      .update({
-        business_name: businessName,
-        phone: phone,
-        country: country,
-        currency_code: currencyCode,
-        currency_symbol: currencySymbol,
-        default_vat_rate: noVat ? 0 : parseFloat(vatRate) || 0,
-      })
-      .eq('id', user.id)
-
-    if (updateError) {
-      setError(updateError.message)
-      setLoading(false)
-    } else {
-      router.push('/dashboard')
-    }
+    if (!user) { router.push('/login'); return }
+    const { error: updateError } = await supabase.from('profiles').update({
+      business_name: businessName,
+      phone,
+      country,
+      currency_code: currencyCode,
+      currency_symbol: currencySymbol,
+      default_vat_rate: noVat ? 0 : parseFloat(vatRate) || 0,
+    }).eq('id', user.id)
+    if (updateError) { setError(updateError.message); setLoading(false) }
+    else router.push('/dashboard')
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 flex flex-col justify-center px-6 py-10">
-      <div className="mb-8 text-center">
-        <h1 className="text-3xl font-bold text-gray-900">Welcome to Qouta</h1>
-        <p className="text-gray-500 mt-2">Set up your business details</p>
+    <div className="q-page" style={{ minHeight: '100svh' }}>
+      <div style={{ background: 'linear-gradient(135deg, #6c47ff, #9b6bff)', padding: '52px 24px 40px' }}>
+        <div style={{ fontSize: 26, fontWeight: 800, color: '#fff', letterSpacing: -0.5, marginBottom: 4 }}>Welcome to Qouta</div>
+        <div style={{ fontSize: 14, color: 'rgba(255,255,255,0.75)' }}>Set up your business details to get started</div>
       </div>
 
-      <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
-        {error && (
-          <div className="mb-4 p-3 bg-red-50 border border-red-100 rounded-xl text-red-600 text-sm">
-            {error}
+      <div style={{ padding: '24px 16px 100px' }}>
+        {error && <div className="q-error">{error}</div>}
+
+        <div className="q-card" style={{ padding: 20, marginBottom: 12 }}>
+          <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--purple)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 16 }}>Business details</div>
+
+          <div className="q-form-group">
+            <label className="q-label">Business name <span style={{ color: 'var(--red)' }}>*</span></label>
+            <input className="q-input" type="text" value={businessName} onChange={e => setBusinessName(e.target.value)} placeholder="Your business name"/>
           </div>
-        )}
 
-        <div className="mb-4">
-          <label className="block text-sm font-medium text-gray-700 mb-1">
-            Business name <span className="text-red-500">*</span>
-          </label>
-          <input
-            type="text"
-            value={businessName}
-            onChange={e => setBusinessName(e.target.value)}
-            className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-green-500 text-gray-900"
-            placeholder="Your business name"
-          />
-        </div>
-
-        <div className="mb-4">
-          <label className="block text-sm font-medium text-gray-700 mb-1">
-            Phone number <span className="text-red-500">*</span>
-          </label>
-          <input
-            type="tel"
-            value={phone}
-            onChange={e => setPhone(e.target.value)}
-            className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-green-500 text-gray.900"
-            placeholder="+27 123 456 789"
-          />
-        </div>
-
-        <div className="mb-4">
-          <label className="block text-sm font-medium text-gray-700 mb-1">
-            Country <span className="text-red-500">*</span>
-          </label>
-          <select
-            value={countryCode}
-            onChange={handleCountryChange}
-            className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-green-500 text-gray-900 bg-white"
-          >
-            <option value="">Select your country</option>
-            {countries.map(c => (
-              <option key={c.code} value={c.code}>
-                {c.name} ({c.currency_code})
-              </option>
-            ))}
-          </select>
-        </div>
-
-        {currencyCode && (
-          <div className="mb-4 p-3 bg-green-50 border border-green-100 rounded-xl">
-            <p className="text-sm text-green-700">
-              Currency set to <strong>{currencyCode} ({currencySymbol})</strong>
-            </p>
+          <div className="q-form-group">
+            <label className="q-label">Phone number <span style={{ color: 'var(--red)' }}>*</span></label>
+            <input className="q-input" type="tel" value={phone} onChange={e => setPhone(e.target.value)} placeholder="+27 123 456 789"/>
           </div>
-        )}
 
-        <div className="mb-6">
-          <label className="block text-sm font-medium text-gray-700 mb-1">
-            VAT rate (%)
-          </label>
-          <input
-            type="number"
-            value={vatRate}
-            onChange={e => setVatRate(e.target.value)}
-            disabled={noVat}
-            className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-green-500 text-gray-900 disabled:opacity-50 disabled:bg-gray-50"
-            placeholder="e.g. 15"
-          />
-          <label className="flex items-center gap-2 mt-2 cursor-pointer">
+          <div className="q-form-group">
+            <label className="q-label">Country <span style={{ color: 'var(--red)' }}>*</span></label>
+            <select className="q-select" value={countryCode} onChange={handleCountryChange}>
+              <option value="">Select your country</option>
+              {countries.map(c => <option key={c.code} value={c.code}>{c.name} ({c.currency_code})</option>)}
+            </select>
+          </div>
+
+          {currencyCode && (
+            <div className="q-info">
+              Currency automatically set to <strong>{currencyCode} ({currencySymbol})</strong>
+            </div>
+          )}
+        </div>
+
+        <div className="q-card" style={{ padding: 20, marginBottom: 24 }}>
+          <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--purple)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 16 }}>VAT settings</div>
+
+          <div className="q-form-group">
+            <label className="q-label">Default VAT rate (%)</label>
             <input
-              type="checkbox"
-              checked={noVat}
-              onChange={e => setNoVat(e.target.checked)}
-              className="w-4 h-4 accent-green-600"
+              className="q-input"
+              type="number"
+              value={vatRate}
+              onChange={e => setVatRate(e.target.value)}
+              disabled={noVat}
+              placeholder="e.g. 15"
             />
-            <span className="text-sm text-gray-600">I do not charge VAT</span>
-          </label>
+          </div>
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <label className="q-toggle">
+              <input type="checkbox" checked={noVat} onChange={e => setNoVat(e.target.checked)}/>
+              <span className="q-toggle-slider"/>
+            </label>
+            <span style={{ fontSize: 14, color: 'var(--text2)' }}>I do not charge VAT</span>
+          </div>
         </div>
 
-        <button
-          onClick={handleSubmit}
-          disabled={loading}
-          className="w-full bg-green-600 text-white py-3 rounded-xl font-medium text-base disabled:opacity-50"
-        >
-          {loading ? 'Saving...' : 'Get started'}
+        <button onClick={handleSubmit} disabled={loading || !isValid} className="q-btn-primary">
+          {loading ? 'Setting up...' : 'Get started'}
         </button>
       </div>
     </div>

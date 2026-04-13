@@ -6,34 +6,23 @@ import { createClient } from '@/lib/supabase'
 import { useRouter } from 'next/navigation'
 import { countries } from '@/lib/countries'
 
-const DEFAULT_PAYMENT_TERMS = `- Prices are valid for 7 days from the date of this quotation.
-- Prices may change after the validity period.
-- When making payment, please use your name or company name as the payment reference.
-- For queries, please contact us via WhatsApp: `
+const DEFAULT_PAYMENT_TERMS = `- Prices are valid for 7 days from the date of this quotation.\n- Prices may change after the validity period.\n- When making payment, please use your name or company name as the payment reference.\n- For queries, please contact us via WhatsApp: `
 
 export default function SettingsPage() {
-  const [businessName, setBusinessName] = useState('')
-  const [contactPerson, setContactPerson] = useState('')
-  const [phone, setPhone] = useState('')
-  const [email, setEmail] = useState('')
-  const [address, setAddress] = useState('')
-  const [registrationNumber, setRegistrationNumber] = useState('')
-  const [vatRegistrationNumber, setVatRegistrationNumber] = useState('')
-  const [country, setCountry] = useState('')
+  const [profile, setProfile] = useState<any>(null)
+  const [form, setForm] = useState({
+    business_name: '', contact_person: '', phone: '', email: '', address: '',
+    registration_number: '', vat_registration_number: '',
+    country: '', currency_code: '', currency_symbol: '',
+    default_vat_rate: '', bank_name: '', bank_account_name: '',
+    bank_account_number: '', bank_branch_code: '', bank_swift_code: '',
+    payment_terms: '',
+  })
   const [countryCode, setCountryCode] = useState('')
-  const [currencyCode, setCurrencyCode] = useState('')
-  const [currencySymbol, setCurrencySymbol] = useState('')
-  const [vatRate, setVatRate] = useState('')
-  const [bankName, setBankName] = useState('')
-  const [bankAccountName, setBankAccountName] = useState('')
-  const [bankAccountNumber, setBankAccountNumber] = useState('')
-  const [bankBranchCode, setBankBranchCode] = useState('')
-  const [bankSwiftCode, setBankSwiftCode] = useState('')
-  const [paymentTerms, setPaymentTerms] = useState('')
+  const [expandedSection, setExpandedSection] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
   const [fetching, setFetching] = useState(true)
   const [saved, setSaved] = useState(false)
-  const [expandedSection, setExpandedSection] = useState<string | null>(null)
   const router = useRouter()
   const supabase = createClient()
 
@@ -41,29 +30,28 @@ export default function SettingsPage() {
     const loadProfile = async () => {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) return
-      const { data } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('id', user.id)
-        .single()
+      const { data } = await supabase.from('profiles').select('*').eq('id', user.id).single()
       if (data) {
-        setBusinessName(data.business_name || '')
-        setContactPerson(data.contact_person || '')
-        setPhone(data.phone || '')
-        setEmail(data.email || '')
-        setAddress(data.address || '')
-        setRegistrationNumber(data.registration_number || '')
-        setVatRegistrationNumber(data.vat_registration_number || '')
-        setCountry(data.country || '')
-        setCurrencyCode(data.currency_code || '')
-        setCurrencySymbol(data.currency_symbol || '')
-        setVatRate(data.default_vat_rate?.toString() || '')
-        setBankName(data.bank_name || '')
-        setBankAccountName(data.bank_account_name || '')
-        setBankAccountNumber(data.bank_account_number || '')
-        setBankBranchCode(data.bank_branch_code || '')
-        setBankSwiftCode(data.bank_swift_code || '')
-        setPaymentTerms(data.payment_terms || DEFAULT_PAYMENT_TERMS + (data.phone || ''))
+        setProfile(data)
+        setForm({
+          business_name: data.business_name || '',
+          contact_person: data.contact_person || '',
+          phone: data.phone || '',
+          email: data.email || '',
+          address: data.address || '',
+          registration_number: data.registration_number || '',
+          vat_registration_number: data.vat_registration_number || '',
+          country: data.country || '',
+          currency_code: data.currency_code || '',
+          currency_symbol: data.currency_symbol || '',
+          default_vat_rate: data.default_vat_rate?.toString() || '',
+          bank_name: data.bank_name || '',
+          bank_account_name: data.bank_account_name || '',
+          bank_account_number: data.bank_account_number || '',
+          bank_branch_code: data.bank_branch_code || '',
+          bank_swift_code: data.bank_swift_code || '',
+          payment_terms: data.payment_terms || DEFAULT_PAYMENT_TERMS + (data.phone || ''),
+        })
         const found = countries.find(c => c.name === data.country)
         if (found) setCountryCode(found.code)
       }
@@ -72,13 +60,13 @@ export default function SettingsPage() {
     loadProfile()
   }, [])
 
+  const set = (field: string, value: string) => setForm(f => ({ ...f, [field]: value }))
+
   const handleCountryChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const selected = countries.find(c => c.code === e.target.value)
     if (selected) {
       setCountryCode(selected.code)
-      setCountry(selected.name)
-      setCurrencyCode(selected.currency_code)
-      setCurrencySymbol(selected.currency_symbol)
+      setForm(f => ({ ...f, country: selected.name, currency_code: selected.currency_code, currency_symbol: selected.currency_symbol }))
     }
   }
 
@@ -86,28 +74,10 @@ export default function SettingsPage() {
     setLoading(true)
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return
-    await supabase
-      .from('profiles')
-      .update({
-        business_name: businessName,
-        contact_person: contactPerson,
-        phone,
-        email,
-        address,
-        registration_number: registrationNumber,
-        vat_registration_number: vatRegistrationNumber,
-        country,
-        currency_code: currencyCode,
-        currency_symbol: currencySymbol,
-        default_vat_rate: parseFloat(vatRate) || 0,
-        bank_name: bankName,
-        bank_account_name: bankAccountName,
-        bank_account_number: bankAccountNumber,
-        bank_branch_code: bankBranchCode,
-        bank_swift_code: bankSwiftCode,
-        payment_terms: paymentTerms,
-      })
-      .eq('id', user.id)
+    await supabase.from('profiles').update({
+      ...form,
+      default_vat_rate: parseFloat(form.default_vat_rate) || 0,
+    }).eq('id', user.id)
     setLoading(false)
     setSaved(true)
     setTimeout(() => setSaved(false), 3000)
@@ -118,306 +88,178 @@ export default function SettingsPage() {
     router.push('/login')
   }
 
-  const toggleSection = (section: string) => {
-    setExpandedSection(expandedSection === section ? null : section)
-  }
+  const toggle = (s: string) => setExpandedSection(expandedSection === s ? null : s)
 
-  if (fetching) {
-    return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <p className="text-gray-400 text-sm">Loading...</p>
-      </div>
-    )
-  }
+  const Section = ({ id, icon, iconBg, label, preview, children }: any) => (
+    <div className="q-settings-section">
+      <button className="q-collapsible-header" onClick={() => toggle(id)}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <div className="q-settings-icon" style={{ background: iconBg }}>{icon}</div>
+          <div>
+            <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text)' }}>{label}</div>
+            {preview && <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 1 }}>{preview}</div>}
+          </div>
+        </div>
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+          <path d={expandedSection === id ? 'M4 10l4-4 4 4' : 'M4 6l4 4 4-4'} stroke="#a8a5c0" strokeWidth="1.5" strokeLinecap="round"/>
+        </svg>
+      </button>
+      {expandedSection === id && (
+        <div className="q-collapsible-body">{children}</div>
+      )}
+    </div>
+  )
+
+  const Field = ({ label, children }: any) => (
+    <div className="q-form-group">
+      <label className="q-label">{label}</label>
+      {children}
+    </div>
+  )
+
+  if (fetching) return <div className="q-page"><div className="q-loading">Loading...</div></div>
 
   return (
-    <div className="min-h-screen bg-gray-50 pb-24">
-      <div className="bg-white border-b border-gray-100 px-6 py-4">
-        <h1 className="text-2xl font-bold text-gray-900">Settings</h1>
+    <div className="q-page">
+      <div className="q-topbar">
+        <div style={{ width: 34 }} />
+        <div className="q-topbar-title">Settings</div>
+        <div style={{ width: 34 }} />
       </div>
 
-      <div className="px-6 py-6 space-y-3">
-        {saved && (
-          <div className="p-3 bg-green-50 border border-green-100 rounded-xl text-green-700 text-sm">
-            Settings saved successfully
+      <div className="q-scroll">
+        <div className="q-profile-card">
+          <div style={{ width: 50, height: 50, borderRadius: '50%', background: 'rgba(255,255,255,0.2)', border: '2px solid rgba(255,255,255,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20, fontWeight: 800, color: '#fff' }}>
+            {form.business_name?.[0]?.toUpperCase() || 'Q'}
           </div>
-        )}
-
-        <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden">
-          <button
-            onClick={() => toggleSection('business')}
-            className="w-full flex justify-between items-center px-4 py-4"
-          >
-            <span className="text-base font-semibold text-gray-900">Business profile</span>
-            <span className="text-gray-400 text-lg">{expandedSection === 'business' ? '∧' : '∨'}</span>
-          </button>
-          {expandedSection === 'business' && (
-            <div className="px-4 pb-4 space-y-4 border-t border-gray-100 pt-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Business name</label>
-                <input
-                  type="text"
-                  value={businessName}
-                  onChange={e => setBusinessName(e.target.value)}
-                  className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-green-500 text-gray-900"
-                  placeholder="Your business name"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Contact person</label>
-                <input
-                  type="text"
-                  value={contactPerson}
-                  onChange={e => setContactPerson(e.target.value)}
-                  className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-green-500 text-gray-900"
-                  placeholder="Full name of contact person"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Phone</label>
-                <input
-                  type="tel"
-                  value={phone}
-                  onChange={e => setPhone(e.target.value)}
-                  className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-green-500 text-gray-900"
-                  placeholder="+27 123 456 789"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
-                <input
-                  type="email"
-                  value={email}
-                  onChange={e => setEmail(e.target.value)}
-                  className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-green-500 text-gray-900"
-                  placeholder="you@example.com"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Address</label>
-                <input
-                  type="text"
-                  value={address}
-                  onChange={e => setAddress(e.target.value)}
-                  className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-green-500 text-gray-900"
-                  placeholder="Your business address"
-                />
-              </div>
-            </div>
-          )}
+          <div>
+            <div style={{ fontSize: 16, fontWeight: 700, color: '#fff' }}>{form.business_name || 'Your business'}</div>
+            <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.7)', marginTop: 2 }}>{form.country || 'Set your country'} · {form.currency_code || 'USD'}</div>
+          </div>
         </div>
 
-        <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden">
-          <button
-            onClick={() => toggleSection('registration')}
-            className="w-full flex justify-between items-center px-4 py-4"
-          >
-            <span className="text-base font-semibold text-gray-900">Registration details</span>
-            <span className="text-gray-400 text-lg">{expandedSection === 'registration' ? '∧' : '∨'}</span>
-          </button>
-          {expandedSection === 'registration' && (
-            <div className="px-4 pb-4 space-y-4 border-t border-gray-100 pt-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Company registration number</label>
-                <input
-                  type="text"
-                  value={registrationNumber}
-                  onChange={e => setRegistrationNumber(e.target.value)}
-                  className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-green-500 text-gray-900"
-                  placeholder="e.g. 2024/123456/07"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">VAT registration number</label>
-                <input
-                  type="text"
-                  value={vatRegistrationNumber}
-                  onChange={e => setVatRegistrationNumber(e.target.value)}
-                  className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-green-500 text-gray-900"
-                  placeholder="e.g. 4123456789"
-                />
-              </div>
-              <p className="text-xs text-gray-400">Leave blank if your business is not VAT registered</p>
-            </div>
-          )}
-        </div>
+        {saved && <div className="q-success">Settings saved successfully</div>}
 
-        <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden">
-          <button
-            onClick={() => toggleSection('currency')}
-            className="w-full flex justify-between items-center px-4 py-4"
-          >
-            <span className="text-base font-semibold text-gray-900">Country and currency</span>
-            <span className="text-gray-400 text-lg">{expandedSection === 'currency' ? '∧' : '∨'}</span>
-          </button>
-          {expandedSection === 'currency' && (
-            <div className="px-4 pb-4 space-y-4 border-t border-gray-100 pt-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Country</label>
-                <select
-                  onChange={handleCountryChange}
-                  value={countryCode}
-                  className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-green-500 text-gray-900 bg-white"
-                >
-                  <option value="">Select your country</option>
-                  {countries.map(c => (
-                    <option key={c.code} value={c.code}>
-                      {c.name} ({c.currency_code})
-                    </option>
-                  ))}
-                </select>
-              </div>
-              {currencyCode && (
-                <div className="p-3 bg-green-50 border border-green-100 rounded-xl">
-                  <p className="text-sm text-green-700">
-                    Currency: <strong>{currencyCode} ({currencySymbol})</strong>
-                  </p>
-                </div>
-              )}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Default VAT rate (%)</label>
-                <input
-                  type="number"
-                  value={vatRate}
-                  onChange={e => setVatRate(e.target.value)}
-                  className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-green-500 text-gray-900"
-                  placeholder="e.g. 15"
-                />
-                <p className="text-xs text-gray-400 mt-1">Set to 0 if you do not charge VAT</p>
-              </div>
-            </div>
-          )}
-        </div>
-
-        <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden">
-          <button
-            onClick={() => toggleSection('banking')}
-            className="w-full flex justify-between items-center px-4 py-4"
-          >
-            <span className="text-base font-semibold text-gray-900">Banking details</span>
-            <span className="text-gray-400 text-lg">{expandedSection === 'banking' ? '∧' : '∨'}</span>
-          </button>
-          {expandedSection === 'banking' && (
-            <div className="px-4 pb-4 space-y-4 border-t border-gray-100 pt-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Bank name</label>
-                <input
-                  type="text"
-                  value={bankName}
-                  onChange={e => setBankName(e.target.value)}
-                  className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-green-500 text-gray-900"
-                  placeholder="e.g. First National Bank"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Account name</label>
-                <input
-                  type="text"
-                  value={bankAccountName}
-                  onChange={e => setBankAccountName(e.target.value)}
-                  className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-green-500 text-gray-900"
-                  placeholder="Name on the account"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Account number</label>
-                <input
-                  type="text"
-                  value={bankAccountNumber}
-                  onChange={e => setBankAccountNumber(e.target.value)}
-                  className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-green-500 text-gray-900"
-                  placeholder="Your account number"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Branch code</label>
-                <input
-                  type="text"
-                  value={bankBranchCode}
-                  onChange={e => setBankBranchCode(e.target.value)}
-                  className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-green-500 text-gray-900"
-                  placeholder="e.g. 250655"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">SWIFT code</label>
-                <input
-                  type="text"
-                  value={bankSwiftCode}
-                  onChange={e => setBankSwiftCode(e.target.value)}
-                  className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-green-500 text-gray-900"
-                  placeholder="e.g. FIRNZAJJ"
-                />
-              </div>
-              <p className="text-xs text-gray-400">SWIFT code is required for international payments</p>
-            </div>
-          )}
-        </div>
-
-        <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden">
-          <button
-            onClick={() => toggleSection('terms')}
-            className="w-full flex justify-between items-center px-4 py-4"
-          >
-            <span className="text-base font-semibold text-gray-900">Payment terms</span>
-            <span className="text-gray-400 text-lg">{expandedSection === 'terms' ? '∧' : '∨'}</span>
-          </button>
-          {expandedSection === 'terms' && (
-            <div className="px-4 pb-4 space-y-4 border-t border-gray-100 pt-4">
-              <textarea
-                value={paymentTerms}
-                onChange={e => setPaymentTerms(e.target.value)}
-                rows={8}
-                className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-green-500 text-gray-900 text-sm"
-                placeholder="Enter your payment terms..."
-              />
-              <p className="text-xs text-gray-400">These terms appear at the bottom of every quote and invoice</p>
-            </div>
-          )}
-        </div>
-
-        <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden">
-          <Link
-            href="/settings/items"
-            className="w-full flex justify-between items-center px-4 py-4"
-          >
-            <span className="text-base font-semibold text-gray-900">Items directory</span>
-            <span className="text-gray-400 text-lg">›</span>
-          </Link>
-        </div>
-
-        <button
-          onClick={handleSave}
-          disabled={loading}
-          className="w-full bg-green-600 text-white py-3 rounded-xl font-medium text-base disabled:opacity-50"
+        <Section
+          id="business"
+          iconBg="var(--purple-bg)"
+          icon={<svg width="16" height="16" viewBox="0 0 16 16" fill="none"><rect x="2" y="2" width="12" height="12" rx="3" stroke="#6c47ff" strokeWidth="1.5"/><path d="M5 8h6M5 5h4M5 11h3" stroke="#6c47ff" strokeWidth="1.5" strokeLinecap="round"/></svg>}
+          label="Business profile"
+          preview={form.business_name ? `${form.business_name} · ${form.phone}` : 'Set your business details'}
         >
+          <Field label="Business name"><input className="q-input" value={form.business_name} onChange={e => set('business_name', e.target.value)} placeholder="Your business name"/></Field>
+          <Field label="Contact person"><input className="q-input" value={form.contact_person} onChange={e => set('contact_person', e.target.value)} placeholder="Full name"/></Field>
+          <Field label="Phone"><input className="q-input" type="tel" value={form.phone} onChange={e => set('phone', e.target.value)} placeholder="+27 123 456 789"/></Field>
+          <Field label="Email"><input className="q-input" type="email" value={form.email} onChange={e => set('email', e.target.value)} placeholder="you@example.com"/></Field>
+          <Field label="Address"><input className="q-input" value={form.address} onChange={e => set('address', e.target.value)} placeholder="Business address"/></Field>
+        </Section>
+
+        <Section
+          id="registration"
+          iconBg="var(--green-bg)"
+          icon={<svg width="16" height="16" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="6" stroke="#00c27a" strokeWidth="1.5"/><path d="M5 8l2 2 4-4" stroke="#00c27a" strokeWidth="1.5" strokeLinecap="round"/></svg>}
+          label="Registration details"
+          preview="Company reg · VAT number"
+        >
+          <Field label="Company registration number"><input className="q-input" value={form.registration_number} onChange={e => set('registration_number', e.target.value)} placeholder="e.g. 2024/123456/07"/></Field>
+          <Field label="VAT registration number"><input className="q-input" value={form.vat_registration_number} onChange={e => set('vat_registration_number', e.target.value)} placeholder="e.g. 4123456789"/></Field>
+          <div style={{ fontSize: 12, color: 'var(--text3)', marginTop: -8 }}>Leave blank if not VAT registered</div>
+        </Section>
+
+        <Section
+          id="currency"
+          iconBg="var(--orange-bg)"
+          icon={<svg width="16" height="16" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="6" stroke="#ff7a2f" strokeWidth="1.5"/><path d="M8 5v3l2 2" stroke="#ff7a2f" strokeWidth="1.5" strokeLinecap="round"/></svg>}
+          label="Country and currency"
+          preview={form.country ? `${form.country} · ${form.currency_code} (${form.currency_symbol})` : 'Set your country'}
+        >
+          <Field label="Country">
+            <select className="q-select" value={countryCode} onChange={handleCountryChange}>
+              <option value="">Select your country</option>
+              {countries.map(c => <option key={c.code} value={c.code}>{c.name} ({c.currency_code})</option>)}
+            </select>
+          </Field>
+          {form.currency_code && (
+            <div className="q-info" style={{ marginBottom: 14 }}>Currency set to <strong>{form.currency_code} ({form.currency_symbol})</strong></div>
+          )}
+          <Field label="Default VAT rate (%)">
+            <input className="q-input" type="number" value={form.default_vat_rate} onChange={e => set('default_vat_rate', e.target.value)} placeholder="e.g. 15"/>
+          </Field>
+          <div style={{ fontSize: 12, color: 'var(--text3)', marginTop: -8 }}>Set to 0 if you do not charge VAT</div>
+        </Section>
+
+        <Section
+          id="banking"
+          iconBg="var(--yellow-bg)"
+          icon={<svg width="16" height="16" viewBox="0 0 16 16" fill="none"><rect x="2" y="4" width="12" height="9" rx="2" stroke="#b38f00" strokeWidth="1.5"/><path d="M2 7h12" stroke="#b38f00" strokeWidth="1.5"/><path d="M5 10h2M10 10h1" stroke="#b38f00" strokeWidth="1.5" strokeLinecap="round"/></svg>}
+          label="Banking details"
+          preview={form.bank_name ? `${form.bank_name} · ${form.bank_account_number ? '••••' + form.bank_account_number.slice(-4) : 'No account'}` : 'Add your bank details'}
+        >
+          <Field label="Bank name"><input className="q-input" value={form.bank_name} onChange={e => set('bank_name', e.target.value)} placeholder="e.g. First National Bank"/></Field>
+          <Field label="Account name"><input className="q-input" value={form.bank_account_name} onChange={e => set('bank_account_name', e.target.value)} placeholder="Name on the account"/></Field>
+          <Field label="Account number"><input className="q-input" value={form.bank_account_number} onChange={e => set('bank_account_number', e.target.value)} placeholder="Your account number"/></Field>
+          <Field label="Branch code"><input className="q-input" value={form.bank_branch_code} onChange={e => set('bank_branch_code', e.target.value)} placeholder="e.g. 250655"/></Field>
+          <Field label="SWIFT code">
+            <input className="q-input" value={form.bank_swift_code} onChange={e => set('bank_swift_code', e.target.value)} placeholder="e.g. FIRNZAJJ"/>
+          </Field>
+          <div style={{ fontSize: 12, color: 'var(--text3)', marginTop: -8 }}>SWIFT code required for international payments</div>
+        </Section>
+
+        <Section
+          id="terms"
+          iconBg="var(--purple-bg)"
+          icon={<svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M3 4h10M3 8h7M3 12h5" stroke="#6c47ff" strokeWidth="1.5" strokeLinecap="round"/></svg>}
+          label="Payment terms"
+          preview="Appears on every quote and invoice"
+        >
+          <Field label="Payment terms">
+            <textarea className="q-textarea" rows={8} value={form.payment_terms} onChange={e => set('payment_terms', e.target.value)}/>
+          </Field>
+          <div style={{ fontSize: 12, color: 'var(--text3)', marginTop: -8 }}>These terms appear at the bottom of every PDF</div>
+        </Section>
+
+        <Link href="/settings/items" className="q-settings-section" style={{ display: 'block', textDecoration: 'none' }}>
+          <div className="q-settings-row" style={{ border: 'none' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+              <div className="q-settings-icon" style={{ background: 'var(--green-bg)' }}>
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><rect x="2" y="2" width="5" height="5" rx="1" stroke="#00c27a" strokeWidth="1.5"/><rect x="9" y="2" width="5" height="5" rx="1" stroke="#00c27a" strokeWidth="1.5"/><rect x="2" y="9" width="5" height="5" rx="1" stroke="#00c27a" strokeWidth="1.5"/><rect x="9" y="9" width="5" height="5" rx="1" stroke="#00c27a" strokeWidth="1.5"/></svg>
+              </div>
+              <div>
+                <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text)' }}>Items directory</div>
+                <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 1 }}>Manage your products and services</div>
+              </div>
+            </div>
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M6 4l4 4-4 4" stroke="#a8a5c0" strokeWidth="1.5" strokeLinecap="round"/></svg>
+          </div>
+        </Link>
+
+        <button onClick={handleSave} disabled={loading} className="q-btn-primary" style={{ marginBottom: 10 }}>
           {loading ? 'Saving...' : 'Save settings'}
         </button>
 
-        <button
-          onClick={handleSignOut}
-          className="w-full border border-red-200 text-red-500 py-3 rounded-xl font-medium text-base"
-        >
+        <button onClick={handleSignOut} className="q-btn-danger">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M6 3H3a1 1 0 00-1 1v8a1 1 0 001 1h3M10 11l3-3-3-3M13 8H6" stroke="#ff4060" strokeWidth="1.5" strokeLinecap="round"/></svg>
           Sign out
         </button>
       </div>
 
-      <nav className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-100 px-6 py-3 flex justify-around">
-        <Link href="/dashboard" className="flex flex-col items-center gap-1">
-          <span className="text-gray-400 text-xl">⊞</span>
-          <span className="text-xs text-gray-400">Dashboard</span>
+      <nav className="q-bottomnav">
+        <Link href="/dashboard" className="q-nav-item">
+          <svg width="22" height="22" viewBox="0 0 22 22" fill="none"><rect x="2" y="2" width="8" height="8" rx="2" fill="#a8a5c0"/><rect x="12" y="2" width="8" height="8" rx="2" fill="#a8a5c0"/><rect x="2" y="12" width="8" height="8" rx="2" fill="#a8a5c0"/><rect x="12" y="12" width="8" height="8" rx="2" fill="#a8a5c0"/></svg>
+          <span className="q-nav-label">Dashboard</span>
         </Link>
-        <Link href="/documents" className="flex flex-col items-center gap-1">
-          <span className="text-gray-400 text-xl">◻</span>
-          <span className="text-xs text-gray-400">Documents</span>
+        <Link href="/documents" className="q-nav-item">
+          <svg width="22" height="22" viewBox="0 0 22 22" fill="none"><path d="M5 3h12a2 2 0 012 2v12a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2zm2 5h8M7 11h8M7 15h5" stroke="#a8a5c0" strokeWidth="1.5" strokeLinecap="round"/></svg>
+          <span className="q-nav-label">Docs</span>
         </Link>
-        <Link href="/clients" className="flex flex-col items-center gap-1">
-          <span className="text-gray-400 text-xl">◻</span>
-          <span className="text-xs text-gray-400">Clients</span>
+        <Link href="/clients" className="q-nav-item">
+          <svg width="22" height="22" viewBox="0 0 22 22" fill="none"><circle cx="11" cy="8" r="4" stroke="#a8a5c0" strokeWidth="1.5"/><path d="M3 20c0-4 3.6-7 8-7s8 3 8 7" stroke="#a8a5c0" strokeWidth="1.5" strokeLinecap="round"/></svg>
+          <span className="q-nav-label">Clients</span>
         </Link>
-        <Link href="/settings" className="flex flex-col items-center gap-1">
-          <span className="text-green-600 text-xl">◻</span>
-          <span className="text-xs font-medium text-green-600">Settings</span>
+        <Link href="/settings" className="q-nav-item active">
+          <svg width="22" height="22" viewBox="0 0 22 22" fill="none"><circle cx="11" cy="11" r="3" stroke="#6c47ff" strokeWidth="1.5"/><path d="M11 2v2M11 18v2M2 11h2M18 11h2M4.9 4.9l1.4 1.4M15.7 15.7l1.4 1.4M4.9 17.1l1.4-1.4M15.7 6.3l1.4-1.4" stroke="#6c47ff" strokeWidth="1.5"/></svg>
+          <span className="q-nav-label" style={{ color: 'var(--purple)' }}>Settings</span>
+          <div className="q-nav-dot"/>
         </Link>
       </nav>
     </div>

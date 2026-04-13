@@ -4,17 +4,15 @@ import Link from 'next/link'
 import { useState, useEffect } from 'react'
 import { createClient } from '@/lib/supabase'
 
-type Client = {
-  id: string
-  name: string
-  email: string
-  phone: string
-  address: string
-  created_at: string
-}
+const AVATAR_COLORS = [
+  { bg: 'var(--purple-bg)', color: 'var(--purple)' },
+  { bg: 'var(--green-bg)', color: 'var(--green)' },
+  { bg: 'var(--orange-bg)', color: 'var(--orange)' },
+  { bg: 'var(--yellow-bg)', color: '#b38f00' },
+]
 
 export default function ClientsPage() {
-  const [clients, setClients] = useState<Client[]>([])
+  const [clients, setClients] = useState<any[]>([])
   const [search, setSearch] = useState('')
   const [loading, setLoading] = useState(true)
   const supabase = createClient()
@@ -23,13 +21,11 @@ export default function ClientsPage() {
     const loadClients = async () => {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) return
-
       const { data } = await supabase
         .from('clients')
         .select('*')
         .eq('user_id', user.id)
         .order('name')
-
       if (data) setClients(data)
       setLoading(false)
     }
@@ -42,78 +38,102 @@ export default function ClientsPage() {
     c.email?.toLowerCase().includes(search.toLowerCase())
   )
 
+  const getInitials = (name: string) =>
+    name.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2)
+
+  const getColor = (name: string) =>
+    AVATAR_COLORS[name.charCodeAt(0) % AVATAR_COLORS.length]
+
   return (
-    <div className="min-h-screen bg-gray-50 pb-24">
-      <div className="bg-white border-b border-gray-100 px-6 py-4">
-        <h1 className="text-2xl font-bold text-gray-900">Clients</h1>
+    <div className="q-page">
+      <div className="q-topbar">
+        <div style={{ width: 34 }} />
+        <div className="q-topbar-title">Clients</div>
+        <div style={{ width: 34 }} />
       </div>
 
-      <div className="px-6 py-4">
-        <div className="mb-4">
+      <div className="q-scroll">
+        <div className="q-search">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+            <circle cx="6.5" cy="6.5" r="5" stroke="#a8a5c0" strokeWidth="1.5"/>
+            <path d="M11 11l3 3" stroke="#a8a5c0" strokeWidth="1.5" strokeLinecap="round"/>
+          </svg>
           <input
-            type="text"
             value={search}
             onChange={e => setSearch(e.target.value)}
             placeholder="Search clients..."
-            className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-green-500 text-gray-900 bg-white"
           />
+          {search && (
+            <button onClick={() => setSearch('')} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text3)', fontSize: 18, lineHeight: 1, padding: 0 }}>×</button>
+          )}
         </div>
 
         {loading ? (
-          <div className="bg-white rounded-2xl border border-gray-100 p-6 text-center">
-            <p className="text-gray-400 text-sm">Loading...</p>
-          </div>
+          <div className="q-loading">Loading...</div>
         ) : filtered.length === 0 ? (
-          <div className="bg-white rounded-2xl border border-gray-100 p-6 text-center">
-            <p className="text-gray-400 text-sm">
-              {search ? 'No clients found' : 'No clients yet'}
-            </p>
+          <div className="q-empty">
+            <div className="q-empty-title">{search ? 'No clients found' : 'No clients yet'}</div>
+            <div className="q-empty-sub">{search ? 'Try a different search' : 'Tap + to add your first client'}</div>
           </div>
         ) : (
-          <div className="space-y-3">
-            {filtered.map(client => (
-              <Link
-                key={client.id}
-                href={`/clients/${client.id}`}
-                className="block bg-white border border-gray-100 rounded-2xl p-4"
-              >
-                <div className="flex justify-between items-start">
-                  <div>
-                    <p className="text-sm font-semibold text-gray-900">{client.name}</p>
-                    {client.phone && <p className="text-xs text-gray-500 mt-1">{client.phone}</p>}
-                    {client.email && <p className="text-xs text-gray-500">{client.email}</p>}
-                  </div>
-                  <span className="text-gray-300 text-lg">›</span>
+          filtered.map(client => {
+            const color = getColor(client.name)
+            return (
+              <Link key={client.id} href={`/clients/${client.id}`} className="q-client-card">
+                <div className="q-avatar" style={{ background: color.bg, color: color.color }}>
+                  {getInitials(client.name)}
                 </div>
+                <div style={{ flex: 1, marginLeft: 12 }}>
+                  <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--text)' }}>{client.name}</div>
+                  <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 2 }}>
+                    {client.phone || client.email || 'No contact info'}
+                  </div>
+                </div>
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                  <path d="M6 4l4 4-4 4" stroke="#a8a5c0" strokeWidth="1.5" strokeLinecap="round"/>
+                </svg>
               </Link>
-            ))}
-          </div>
+            )
+          })
         )}
       </div>
 
-      <Link
-        href="/clients/new"
-        className="fixed bottom-20 right-6 bg-green-600 text-white w-14 h-14 rounded-full flex items-center justify-center text-2xl shadow-lg"
-      >
-        +
+      <Link href="/clients/new" className="q-fab">
+        <svg width="22" height="22" viewBox="0 0 22 22" fill="none">
+          <path d="M11 4v14M4 11h14" stroke="#fff" strokeWidth="2.5" strokeLinecap="round"/>
+        </svg>
       </Link>
 
-      <nav className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-100 px-6 py-3 flex justify-around">
-        <Link href="/dashboard" className="flex flex-col items-center gap-1">
-          <span className="text-gray-400 text-xl">⊞</span>
-          <span className="text-xs text-gray-400">Dashboard</span>
+      <nav className="q-bottomnav">
+        <Link href="/dashboard" className="q-nav-item">
+          <svg width="22" height="22" viewBox="0 0 22 22" fill="none">
+            <rect x="2" y="2" width="8" height="8" rx="2" fill="#a8a5c0"/>
+            <rect x="12" y="2" width="8" height="8" rx="2" fill="#a8a5c0"/>
+            <rect x="2" y="12" width="8" height="8" rx="2" fill="#a8a5c0"/>
+            <rect x="12" y="12" width="8" height="8" rx="2" fill="#a8a5c0"/>
+          </svg>
+          <span className="q-nav-label">Dashboard</span>
         </Link>
-        <Link href="/documents" className="flex flex-col items-center gap-1">
-          <span className="text-gray-400 text-xl">◻</span>
-          <span className="text-xs text-gray-400">Documents</span>
+        <Link href="/documents" className="q-nav-item">
+          <svg width="22" height="22" viewBox="0 0 22 22" fill="none">
+            <path d="M5 3h12a2 2 0 012 2v12a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2zm2 5h8M7 11h8M7 15h5" stroke="#a8a5c0" strokeWidth="1.5" strokeLinecap="round"/>
+          </svg>
+          <span className="q-nav-label">Docs</span>
         </Link>
-        <Link href="/clients" className="flex flex-col items-center gap-1">
-          <span className="text-green-600 text-xl">◻</span>
-          <span className="text-xs font-medium text-green-600">Clients</span>
+        <Link href="/clients" className="q-nav-item active">
+          <svg width="22" height="22" viewBox="0 0 22 22" fill="none">
+            <circle cx="11" cy="8" r="4" stroke="#6c47ff" strokeWidth="1.5"/>
+            <path d="M3 20c0-4 3.6-7 8-7s8 3 8 7" stroke="#6c47ff" strokeWidth="1.5" strokeLinecap="round"/>
+          </svg>
+          <span className="q-nav-label" style={{ color: 'var(--purple)' }}>Clients</span>
+          <div className="q-nav-dot"/>
         </Link>
-        <Link href="/settings" className="flex flex-col items-center gap-1">
-          <span className="text-gray-400 text-xl">◻</span>
-          <span className="text-xs text-gray-400">Settings</span>
+        <Link href="/settings" className="q-nav-item">
+          <svg width="22" height="22" viewBox="0 0 22 22" fill="none">
+            <circle cx="11" cy="11" r="3" stroke="#a8a5c0" strokeWidth="1.5"/>
+            <path d="M11 2v2M11 18v2M2 11h2M18 11h2M4.9 4.9l1.4 1.4M15.7 15.7l1.4 1.4M4.9 17.1l1.4-1.4M15.7 6.3l1.4-1.4" stroke="#a8a5c0" strokeWidth="1.5"/>
+          </svg>
+          <span className="q-nav-label">Settings</span>
         </Link>
       </nav>
     </div>

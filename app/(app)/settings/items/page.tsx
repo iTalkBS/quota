@@ -1,16 +1,13 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { createClient } from '@/lib/supabase'
 import { useRouter } from 'next/navigation'
 
-type Item = {
-  id: string
-  name: string
-  description: string
-  type: string
-  default_unit_price: number
-}
+type Item = { id: string; name: string; description: string; type: string; default_unit_price: number }
+type ItemForm = { name: string; description: string; type: string; default_unit_price: string }
+
+const emptyForm: ItemForm = { name: '', description: '', type: 'product', default_unit_price: '' }
 
 export default function ItemsDirectoryPage() {
   const router = useRouter()
@@ -18,194 +15,128 @@ export default function ItemsDirectoryPage() {
   const [items, setItems] = useState<Item[]>([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
-  const [editingId, setEditingId] = useState<string | null>(null)
-  const [editName, setEditName] = useState('')
-  const [editType, setEditType] = useState('product')
-  const [editPrice, setEditPrice] = useState('')
-  const [editDescription, setEditDescription] = useState('')
+  const [userId, setUserId] = useState<string | null>(null)
   const [showAdd, setShowAdd] = useState(false)
-  const [newName, setNewName] = useState('')
-  const [newType, setNewType] = useState('product')
-  const [newPrice, setNewPrice] = useState('')
-  const [newDescription, setNewDescription] = useState('')
+  const [editingId, setEditingId] = useState<string | null>(null)
+  const [newItem, setNewItem] = useState<ItemForm>(emptyForm)
+  const [editItem, setEditItem] = useState<ItemForm>(emptyForm)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
-
-  const [userId, setUserId] = useState<string | null>(null)
 
   useEffect(() => {
     const init = async () => {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) return
       setUserId(user.id)
-      const { data } = await supabase
-        .from('items_directory')
-        .select('*')
-        .eq('user_id', user.id)
-        .order('name')
+      const { data } = await supabase.from('items_directory').select('*').eq('user_id', user.id).order('name')
       if (data) setItems(data)
       setLoading(false)
     }
     init()
   }, [])
 
-  const loadItems = async () => {
+  const reload = useCallback(async () => {
     if (!userId) return
-    const { data } = await supabase
-      .from('items_directory')
-      .select('*')
-      .eq('user_id', userId)
-      .order('name')
+    const { data } = await supabase.from('items_directory').select('*').eq('user_id', userId).order('name')
     if (data) setItems(data)
-  }
+  }, [userId])
 
   const handleAdd = async () => {
+    if (!newItem.name) { setError('Item name is required'); return }
     setSaving(true)
     setError('')
-    if (!newName) {
-      setError('Item name is required')
-      setSaving(false)
-      return
-    }
-    if (!userId) return
-    const { error: saveError } = await supabase
-      .from('items_directory')
-      .insert({
-        user_id: userId,
-        name: newName.trim(),
-        type: newType,
-        default_unit_price: parseFloat(newPrice) || 0,
-        description: newDescription,
-      })
-    if (saveError) {
-      setError(saveError.message)
-    } else {
-      setNewName('')
-      setNewType('product')
-      setNewPrice('')
-      setNewDescription('')
+    const { error: e } = await supabase.from('items_directory').insert({
+      user_id: userId,
+      name: newItem.name.trim(),
+      description: newItem.description,
+      type: newItem.type,
+      default_unit_price: parseFloat(newItem.default_unit_price) || 0,
+    })
+    if (e) { setError(e.message) } else {
+      setNewItem(emptyForm)
       setShowAdd(false)
-      loadItems()
+      reload()
     }
     setSaving(false)
   }
 
-  const handleEdit = (item: Item) => {
+  const startEdit = (item: Item) => {
     setEditingId(item.id)
-    setEditName(item.name)
-    setEditType(item.type)
-    setEditPrice(item.default_unit_price.toString())
-    setEditDescription(item.description || '')
+    setEditItem({ name: item.name, description: item.description || '', type: item.type, default_unit_price: item.default_unit_price.toString() })
   }
 
   const handleSaveEdit = async () => {
     setSaving(true)
-    await supabase
-      .from('items_directory')
-      .update({
-        name: editName.trim(),
-        type: editType,
-        default_unit_price: parseFloat(editPrice) || 0,
-        description: editDescription,
-      })
-      .eq('id', editingId)
+    await supabase.from('items_directory').update({
+      name: editItem.name.trim(),
+      description: editItem.description,
+      type: editItem.type,
+      default_unit_price: parseFloat(editItem.default_unit_price) || 0,
+    }).eq('id', editingId)
     setEditingId(null)
-    loadItems()
+    reload()
     setSaving(false)
   }
 
   const handleDelete = async (id: string) => {
-    if (!confirm('Delete this item from your directory?')) return
+    if (!confirm('Delete this item?')) return
     await supabase.from('items_directory').delete().eq('id', id)
-    setItems(items.filter(i => i.id !== id))
+    setItems(prev => prev.filter(i => i.id !== id))
   }
 
-  const filtered = items.filter(i =>
-    i.name.toLowerCase().includes(search.toLowerCase())
-  )
+  const filtered = items.filter(i => i.name.toLowerCase().includes(search.toLowerCase()))
 
   return (
-    <div className="min-h-screen bg-gray-50 pb-10">
-      <div className="bg-white border-b border-gray-100 px-6 py-4 flex items-center gap-4">
-        <button onClick={() => router.back()} className="text-gray-500 text-lg">←</button>
-        <h1 className="text-lg font-bold text-gray-900">Items directory</h1>
+    <div className="q-page">
+      <div className="q-topbar">
+        <button className="q-back-btn" onClick={() => router.back()}>
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+            <path d="M9 2L4 7l5 5" stroke="#6c47ff" strokeWidth="2" strokeLinecap="round"/>
+          </svg>
+        </button>
+        <div className="q-topbar-title">Items directory</div>
+        <div style={{ width: 34 }}/>
       </div>
 
-      <div className="px-6 py-4 space-y-4">
-        <input
-          type="text"
-          value={search}
-          onChange={e => setSearch(e.target.value)}
-          placeholder="Search items..."
-          className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-green-500 text-gray-900 bg-white"
-        />
+      <div className="q-scroll">
+        <div className="q-search">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+            <circle cx="6.5" cy="6.5" r="5" stroke="#a8a5c0" strokeWidth="1.5"/>
+            <path d="M11 11l3 3" stroke="#a8a5c0" strokeWidth="1.5" strokeLinecap="round"/>
+          </svg>
+          <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search items..."/>
+          {search && (
+            <button onClick={() => setSearch('')} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text3)', fontSize: 18, lineHeight: 1, padding: 0 }}>×</button>
+          )}
+        </div>
 
         {showAdd && (
-          <div className="bg-white border border-gray-200 rounded-2xl p-4 space-y-3">
-            <h2 className="text-sm font-semibold text-gray-900">Add new item</h2>
-            {error && (
-              <div className="p-3 bg-red-50 border border-red-100 rounded-xl text-red-600 text-sm">
-                {error}
-              </div>
-            )}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Name <span className="text-red-500">*</span>
-              </label>
-              <input
-                type="text"
-                value={newName}
-                onChange={e => setNewName(e.target.value)}
-                className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-green-500 text-gray-900"
-                placeholder="Item name"
-              />
+          <div className="q-card" style={{ padding: 20, marginBottom: 12 }}>
+            <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--purple)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 14 }}>New item</div>
+            {error && <div className="q-error">{error}</div>}
+            <div className="q-form-group">
+              <label className="q-label">Name <span style={{ color: 'var(--red)' }}>*</span></label>
+              <input className="q-input" value={newItem.name} onChange={e => setNewItem(prev => ({ ...prev, name: e.target.value }))} placeholder="Item name" autoFocus/>
             </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Type</label>
-              <select
-                value={newType}
-                onChange={e => setNewType(e.target.value)}
-                className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-green-500 text-gray-900 bg-white"
-              >
+            <div className="q-form-group">
+              <label className="q-label">Description</label>
+              <input className="q-input" value={newItem.description} onChange={e => setNewItem(prev => ({ ...prev, description: e.target.value }))} placeholder="Optional description"/>
+            </div>
+            <div className="q-form-group">
+              <label className="q-label">Type</label>
+              <select className="q-select" value={newItem.type} onChange={e => setNewItem(prev => ({ ...prev, type: e.target.value }))}>
                 <option value="product">Product</option>
                 <option value="service">Service</option>
               </select>
             </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Default price</label>
-              <input
-                type="number"
-                value={newPrice}
-                onChange={e => setNewPrice(e.target.value)}
-                onFocus={e => e.target.select()}
-                className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-green-500 text-gray-900"
-                placeholder="0.00"
-                min="0"
-              />
+            <div className="q-form-group">
+              <label className="q-label">Default unit price (selling price)</label>
+              <input className="q-input" type="number" value={newItem.default_unit_price} onChange={e => setNewItem(prev => ({ ...prev, default_unit_price: e.target.value }))} onFocus={e => e.target.select()} placeholder="0.00" min="0"/>
             </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
-              <input
-                type="text"
-                value={newDescription}
-                onChange={e => setNewDescription(e.target.value)}
-                className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-green-500 text-gray-900"
-                placeholder="Optional description"
-              />
-            </div>
-            <div className="flex gap-3">
-              <button
-                onClick={() => setShowAdd(false)}
-                className="flex-1 border border-gray-200 text-gray-600 py-3 rounded-xl font-medium"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleAdd}
-                disabled={saving}
-                className="flex-1 bg-green-600 text-white py-3 rounded-xl font-medium disabled:opacity-50"
-              >
-                {saving ? 'Saving...' : 'Save item'}
+            <div style={{ display: 'flex', gap: 10 }}>
+              <button onClick={() => { setShowAdd(false); setError(''); setNewItem(emptyForm) }} className="q-btn-secondary" style={{ flex: 1 }}>Cancel</button>
+              <button onClick={handleAdd} disabled={saving || !newItem.name} className="q-btn-primary" style={{ flex: 1 }}>
+                {saving ? 'Saving...' : 'Add item'}
               </button>
             </div>
           </div>
@@ -214,116 +145,84 @@ export default function ItemsDirectoryPage() {
         {!showAdd && (
           <button
             onClick={() => setShowAdd(true)}
-            className="w-full border border-dashed border-gray-300 text-gray-500 py-3 rounded-xl text-sm"
+            style={{ width: '100%', background: 'none', border: '2px dashed var(--border2)', borderRadius: 'var(--radius-sm)', padding: 14, fontSize: 14, fontWeight: 600, color: 'var(--purple)', cursor: 'pointer', marginBottom: 14, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}
           >
-            + Add new item
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+              <path d="M8 2v12M2 8h12" stroke="#6c47ff" strokeWidth="2" strokeLinecap="round"/>
+            </svg>
+            Add new item
           </button>
         )}
 
         {loading ? (
-          <div className="bg-white rounded-2xl border border-gray-100 p-6 text-center">
-            <p className="text-gray-400 text-sm">Loading...</p>
-          </div>
+          <div className="q-loading">Loading...</div>
         ) : filtered.length === 0 ? (
-          <div className="bg-white rounded-2xl border border-gray-100 p-6 text-center">
-            <p className="text-gray-400 text-sm">
-              {search ? 'No items found' : 'No items yet'}
-            </p>
+          <div className="q-empty">
+            <div className="q-empty-title">{search ? 'No items found' : 'No items yet'}</div>
+            <div className="q-empty-sub">{search ? 'Try a different search' : 'Add items to reuse them quickly when creating quotes'}</div>
           </div>
         ) : (
-          <div className="space-y-3">
-            {filtered.map(item => (
-              <div key={item.id} className="bg-white border border-gray-100 rounded-2xl p-4">
-                {editingId === item.id ? (
-                  <div className="space-y-3">
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Name</label>
-                      <input
-                        type="text"
-                        value={editName}
-                        onChange={e => setEditName(e.target.value)}
-                        className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-green-500 text-gray-900"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Type</label>
-                      <select
-                        value={editType}
-                        onChange={e => setEditType(e.target.value)}
-                        className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-green-500 text-gray-900 bg-white"
-                      >
-                        <option value="product">Product</option>
-                        <option value="service">Service</option>
-                      </select>
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Default unit price (selling price)</label>
-                      <input
-                        type="number"
-                        value={editPrice}
-                        onChange={e => setEditPrice(e.target.value)}
-                        onFocus={e => e.target.select()}
-                        className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-green-500 text-gray-900"
-                        min="0"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
-                      <input
-                        type="text"
-                        value={editDescription}
-                        onChange={e => setEditDescription(e.target.value)}
-                        className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-green-500 text-gray-900"
-                        placeholder="Optional"
-                      />
-                    </div>
-                    <div className="flex gap-3">
-                      <button
-                        onClick={() => setEditingId(null)}
-                        className="flex-1 border border-gray-200 text-gray-600 py-3 rounded-xl font-medium"
-                      >
-                        Cancel
-                      </button>
-                      <button
-                        onClick={handleSaveEdit}
-                        disabled={saving}
-                        className="flex-1 bg-green-600 text-white py-3 rounded-xl font-medium disabled:opacity-50"
-                      >
-                        {saving ? 'Saving...' : 'Save'}
-                      </button>
+          filtered.map(item => (
+            <div key={item.id} className="q-item-card">
+              {editingId === item.id ? (
+                <>
+                  <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--purple)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 14 }}>Edit item</div>
+                  <div className="q-form-group">
+                    <label className="q-label">Name</label>
+                    <input className="q-input" value={editItem.name} onChange={e => setEditItem(prev => ({ ...prev, name: e.target.value }))} autoFocus/>
+                  </div>
+                  <div className="q-form-group">
+                    <label className="q-label">Description</label>
+                    <input className="q-input" value={editItem.description} onChange={e => setEditItem(prev => ({ ...prev, description: e.target.value }))} placeholder="Optional"/>
+                  </div>
+                  <div className="q-form-group">
+                    <label className="q-label">Type</label>
+                    <select className="q-select" value={editItem.type} onChange={e => setEditItem(prev => ({ ...prev, type: e.target.value }))}>
+                      <option value="product">Product</option>
+                      <option value="service">Service</option>
+                    </select>
+                  </div>
+                  <div className="q-form-group">
+                    <label className="q-label">Default unit price (selling price)</label>
+                    <input className="q-input" type="number" value={editItem.default_unit_price} onChange={e => setEditItem(prev => ({ ...prev, default_unit_price: e.target.value }))} onFocus={e => e.target.select()} min="0"/>
+                  </div>
+                  <div style={{ display: 'flex', gap: 10 }}>
+                    <button onClick={() => setEditingId(null)} className="q-btn-secondary" style={{ flex: 1 }}>Cancel</button>
+                    <button onClick={handleSaveEdit} disabled={saving || !editItem.name} className="q-btn-primary" style={{ flex: 1 }}>
+                      {saving ? 'Saving...' : 'Save'}
+                    </button>
+                  </div>
+                </>
+              ) : (
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--text)' }}>{item.name}</div>
+                    {item.description && <div style={{ fontSize: 12, color: 'var(--text3)', marginTop: 2 }}>{item.description}</div>}
+                    <div style={{ display: 'flex', gap: 10, marginTop: 6, alignItems: 'center' }}>
+                      <span style={{ fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 20, background: item.type === 'product' ? 'var(--purple-bg)' : 'var(--green-bg)', color: item.type === 'product' ? 'var(--purple)' : 'var(--green)' }}>
+                        {item.type}
+                      </span>
+                      <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text)' }}>
+                        {Number(item.default_unit_price).toLocaleString()}
+                      </span>
                     </div>
                   </div>
-                ) : (
-                  <div className="flex justify-between items-start">
-                    <div>
-                      <p className="text-sm font-semibold text-gray-900">{item.name}</p>
-                      <p className="text-xs text-gray-400 mt-1 capitalize">{item.type}</p>
-                      {item.description && (
-                        <p className="text-xs text-gray-400">{item.description}</p>
-                      )}
-                      <p className="text-sm font-medium text-gray-700 mt-1">
-                        {Number(item.default_unit_price).toFixed(2)}
-                      </p>
-                    </div>
-                    <div className="flex gap-3">
-                      <button
-                        onClick={() => handleEdit(item)}
-                        className="text-green-600 text-sm font-medium"
-                      >
-                        Edit
-                      </button>
-                      <button
-                        onClick={() => handleDelete(item.id)}
-                        className="text-red-400 text-sm font-medium"
-                      >
-                        Delete
-                      </button>
-                    </div>
+                  <div style={{ display: 'flex', gap: 8 }}>
+                    <button onClick={() => startEdit(item)} className="q-icon-btn" style={{ background: 'var(--purple-bg)' }}>
+                      <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+                        <path d="M9.5 2.5l2 2L4 12H2v-2L9.5 2.5z" stroke="#6c47ff" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/>
+                      </svg>
+                    </button>
+                    <button onClick={() => handleDelete(item.id)} className="q-icon-btn" style={{ background: 'var(--red-bg)' }}>
+                      <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+                        <path d="M2 3.5h10M4.5 3.5V2.5h5v1M5.5 6v4M8.5 6v4M3 3.5l.8 8h6.4l.8-8" stroke="#ff4060" strokeWidth="1.3" strokeLinecap="round"/>
+                      </svg>
+                    </button>
                   </div>
-                )}
-              </div>
-            ))}
-          </div>
+                </div>
+              )}
+            </div>
+          ))
         )}
       </div>
     </div>

@@ -4,25 +4,9 @@ import Link from 'next/link'
 import { useState, useEffect } from 'react'
 import { createClient } from '@/lib/supabase'
 
-type Quote = {
-  id: string
-  quote_number: string
-  type: string
-  status: string
-  total: number
-  currency_symbol: string
-  issue_date: string
-  client_id: string
-}
-
-type Client = {
-  id: string
-  name: string
-}
-
 export default function DashboardPage() {
-  const [quotes, setQuotes] = useState<Quote[]>([])
-  const [clients, setClients] = useState<Client[]>([])
+  const [quotes, setQuotes] = useState<any[]>([])
+  const [clients, setClients] = useState<any[]>([])
   const [profile, setProfile] = useState<any>(null)
   const [loading, setLoading] = useState(true)
   const supabase = createClient()
@@ -31,194 +15,142 @@ export default function DashboardPage() {
     const loadData = async () => {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) return
-
-      const [{ data: quotesData }, { data: clientsData }, { data: profileData }] = await Promise.all([
-        supabase
-          .from('quotes')
-          .select('*')
-          .eq('user_id', user.id)
-          .order('created_at', { ascending: false }),
-        supabase
-          .from('clients')
-          .select('id, name')
-          .eq('user_id', user.id),
-        supabase
-          .from('profiles')
-          .select('*')
-          .eq('id', user.id)
-          .single(),
+      const [{ data: q }, { data: c }, { data: p }] = await Promise.all([
+        supabase.from('quotes').select('*').eq('user_id', user.id).order('created_at', { ascending: false }),
+        supabase.from('clients').select('id, name').eq('user_id', user.id),
+        supabase.from('profiles').select('*').eq('id', user.id).single(),
       ])
-
-      if (quotesData) setQuotes(quotesData)
-      if (clientsData) setClients(clientsData)
-      if (profileData) setProfile(profileData)
+      if (q) setQuotes(q)
+      if (c) setClients(c)
+      if (p) setProfile(p)
       setLoading(false)
     }
     loadData()
   }, [])
 
-  const getClientName = (clientId: string) => {
-    const client = clients.find(c => c.id === clientId)
-    return client?.name || 'Unknown client'
-  }
+  const getClientName = (clientId: string) => clients.find(c => c.id === clientId)?.name || 'Unknown client'
 
   const getStatusStyle = (status: string) => {
-    switch (status) {
-      case 'paid': return 'bg-green-100 text-green-700'
-      case 'unpaid': return 'bg-amber-100 text-amber-700'
-      case 'overdue': return 'bg-red-100 text-red-700'
-      case 'converted': return 'bg-purple-100 text-purple-700'
-      case 'sent': return 'bg-blue-100 text-blue-700'
-      default: return 'bg-gray-100 text-gray-600'
+    const map: Record<string, string> = {
+      paid: 'badge-paid', unpaid: 'badge-unpaid', overdue: 'badge-overdue',
+      converted: 'badge-converted', sent: 'badge-sent', accepted: 'badge-accepted',
+      rejected: 'badge-rejected', draft: 'badge-draft',
     }
+    return map[status] || 'badge-draft'
   }
 
   const totalQuotes = quotes.filter(q => q.type === 'quote').length
   const unpaidInvoices = quotes.filter(q => q.type === 'invoice' && q.status === 'unpaid')
   const unpaidTotal = unpaidInvoices.reduce((sum, q) => sum + Number(q.total), 0)
-  const unpaidSymbol = unpaidInvoices[0]?.currency_symbol || '$'
-
-  const recentQuotes = quotes.filter(q => q.type === 'quote').slice(0, 3)
-  const recentInvoices = quotes.filter(q => q.type === 'invoice').slice(0, 3)
+  const unpaidSymbol = unpaidInvoices[0]?.currency_symbol || ''
+  const recent = quotes.slice(0, 5)
 
   return (
-    <div className="min-h-screen bg-gray-50 pb-24">
-      <div className="bg-white border-b border-gray-100 px-6 py-4">
-        <h1 className="text-2xl font-bold text-gray-900">Qouta</h1>
-        <p className="text-sm text-gray-500">
-          {profile?.business_name || 'Welcome back'}
-        </p>
+    <div className="q-page">
+      <div className="q-header-gradient" style={{ paddingTop: 56 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', position: 'relative', zIndex: 1 }}>
+          <div>
+            <div style={{ fontSize: 26, fontWeight: 800, color: '#fff', letterSpacing: -0.5 }}>Qouta</div>
+            <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.75)', marginTop: 2 }}>
+              {profile?.business_name || 'Welcome back'}
+            </div>
+          </div>
+          <div style={{ width: 40, height: 40, borderRadius: '50%', background: 'rgba(255,255,255,0.2)', border: '2px solid rgba(255,255,255,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16, fontWeight: 800, color: '#fff' }}>
+            {profile?.business_name?.[0]?.toUpperCase() || 'Q'}
+          </div>
+        </div>
       </div>
 
-      <div className="px-6 py-6">
-        {loading ? (
-          <div className="bg-white rounded-2xl border border-gray-100 p-6 text-center mb-6">
-            <p className="text-gray-400 text-sm">Loading...</p>
+      <div className="q-scroll" style={{ paddingTop: 24 }}>
+        <div className="q-stat-grid">
+          <div className="q-stat">
+            <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 6 }}>Total quotes</div>
+            <div style={{ fontSize: 28, fontWeight: 800, color: 'var(--text)', letterSpacing: -0.5 }}>{totalQuotes}</div>
+            <div style={{ fontSize: 11, color: 'var(--purple)', fontWeight: 600, marginTop: 3 }}>all time</div>
           </div>
+          <div className="q-stat">
+            <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 6 }}>Unpaid</div>
+            <div style={{ fontSize: 28, fontWeight: 800, color: 'var(--text)', letterSpacing: -0.5 }}>{unpaidInvoices.length}</div>
+            {unpaidInvoices.length > 0 && (
+              <div style={{ fontSize: 11, color: 'var(--orange)', fontWeight: 600, marginTop: 3 }}>
+                {unpaidSymbol} {unpaidTotal.toLocaleString()}
+              </div>
+            )}
+          </div>
+        </div>
+
+        <Link href="/documents/new" className="q-btn-primary" style={{ marginBottom: 20, textDecoration: 'none' }}>
+          <svg width="18" height="18" viewBox="0 0 18 18" fill="none"><path d="M9 3v12M3 9h12" stroke="#fff" stroke-width="2.5" stroke-linecap="round"/></svg>
+          New Quote
+        </Link>
+
+        {loading ? (
+          <div className="q-loading">Loading...</div>
         ) : (
           <>
-            <div className="grid grid-cols-2 gap-4 mb-6">
-              <div className="bg-white rounded-2xl border border-gray-100 p-4">
-                <p className="text-sm text-gray-500">Total quotes</p>
-                <p className="text-2xl font-bold text-gray-900">{totalQuotes}</p>
-              </div>
-              <div className="bg-white rounded-2xl border border-gray-100 p-4">
-                <p className="text-sm text-gray-500">Unpaid invoices</p>
-                <p className="text-2xl font-bold text-gray-900">{unpaidInvoices.length}</p>
-                {unpaidInvoices.length > 0 && (
-                  <p className="text-xs text-amber-600 font-medium mt-1">
-                    {unpaidSymbol} {unpaidTotal.toFixed(2)}
-                  </p>
-                )}
-              </div>
+            <div className="q-section-header">
+              <div className="q-section-title">Recent documents</div>
+              <Link href="/documents" className="q-section-link">See all</Link>
             </div>
 
-            <Link
-              href="/documents/new"
-              className="block w-full bg-green-600 text-white py-4 rounded-2xl font-medium text-center text-base mb-6"
-            >
-              + New Quote
-            </Link>
-
-            <div className="mb-6">
-              <div className="flex justify-between items-center mb-3">
-                <h2 className="text-base font-semibold text-gray-900">Recent quotes</h2>
-                <Link href="/documents" className="text-sm text-green-600">See all</Link>
+            {recent.length === 0 ? (
+              <div className="q-empty">
+                <div className="q-empty-title">No documents yet</div>
+                <div className="q-empty-sub">Create your first quote to get started</div>
               </div>
-              {recentQuotes.length === 0 ? (
-                <div className="bg-white rounded-2xl border border-gray-100 p-6 text-center">
-                  <p className="text-gray-400 text-sm">No quotes yet</p>
-                </div>
-              ) : (
-                <div className="space-y-3">
-                  {recentQuotes.map(quote => (
-                    <Link
-                      key={quote.id}
-                      href={`/documents/${quote.id}`}
-                      className="block bg-white border border-gray-100 rounded-2xl p-4"
-                    >
-                      <div className="flex justify-between items-start mb-2">
-                        <div>
-                          <p className="text-sm font-semibold text-gray-900">
-                            {getClientName(quote.client_id)}
-                          </p>
-                          <p className="text-xs text-gray-400">{quote.quote_number}</p>
-                        </div>
-                        <span className={`text-xs font-medium px-2 py-1 rounded-full ${getStatusStyle(quote.status)}`}>
-                          {quote.status.toUpperCase()}
-                        </span>
-                      </div>
-                      <div className="flex justify-between items-center">
-                        <p className="text-xs text-gray-400">{quote.issue_date}</p>
-                        <p className="text-sm font-bold text-gray-900">
-                          {quote.currency_symbol} {Number(quote.total).toFixed(2)}
-                        </p>
-                      </div>
-                    </Link>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            <div className="mb-4">
-              <div className="flex justify-between items-center mb-3">
-                <h2 className="text-base font-semibold text-gray-900">Recent invoices</h2>
-                <Link href="/documents" className="text-sm text-green-600">See all</Link>
-              </div>
-              {recentInvoices.length === 0 ? (
-                <div className="bg-white rounded-2xl border border-gray-100 p-6 text-center">
-                  <p className="text-gray-400 text-sm">No invoices yet</p>
-                </div>
-              ) : (
-                <div className="space-y-3">
-                  {recentInvoices.map(quote => (
-                    <Link
-                      key={quote.id}
-                      href={`/documents/${quote.id}`}
-                      className="block bg-white border border-gray-100 rounded-2xl p-4"
-                    >
-                      <div className="flex justify-between items-start mb-2">
-                        <div>
-                          <p className="text-sm font-semibold text-gray-900">
-                            {getClientName(quote.client_id)}
-                          </p>
-                          <p className="text-xs text-gray-400">{quote.quote_number}</p>
-                        </div>
-                        <span className={`text-xs font-medium px-2 py-1 rounded-full ${getStatusStyle(quote.status)}`}>
-                          {quote.status.toUpperCase()}
-                        </span>
-                      </div>
-                      <div className="flex justify-between items-center">
-                        <p className="text-xs text-gray-400">{quote.issue_date}</p>
-                        <p className="text-sm font-bold text-gray-900">
-                          {quote.currency_symbol} {Number(quote.total).toFixed(2)}
-                        </p>
-                      </div>
-                    </Link>
-                  ))}
-                </div>
-              )}
-            </div>
+            ) : (
+              recent.map(quote => (
+                <Link key={quote.id} href={`/documents/${quote.id}`} className="q-doc-card">
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 }}>
+                    <div>
+                      <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--text)' }}>{getClientName(quote.client_id)}</div>
+                      <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 2 }}>{quote.quote_number}</div>
+                    </div>
+                    <span className={`q-badge ${getStatusStyle(quote.status)}`}>{quote.status.toUpperCase()}</span>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <div style={{ fontSize: 11, color: 'var(--text3)' }}>{quote.issue_date}</div>
+                    <div style={{ fontSize: 15, fontWeight: 800, color: 'var(--text)' }}>
+                      {quote.currency_symbol} {Number(quote.total).toLocaleString()}
+                    </div>
+                  </div>
+                </Link>
+              ))
+            )}
           </>
         )}
       </div>
 
-      <nav className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-100 px-6 py-3 flex justify-around">
-        <Link href="/dashboard" className="flex flex-col items-center gap-1">
-          <span className="text-green-600 text-xl">⊞</span>
-          <span className="text-xs font-medium text-green-600">Dashboard</span>
+      <nav className="q-bottomnav">
+        <Link href="/dashboard" className="q-nav-item active">
+          <svg width="22" height="22" viewBox="0 0 22 22" fill="none">
+            <rect x="2" y="2" width="8" height="8" rx="2" fill="#6c47ff"/>
+            <rect x="12" y="2" width="8" height="8" rx="2" fill="#6c47ff"/>
+            <rect x="2" y="12" width="8" height="8" rx="2" fill="#6c47ff"/>
+            <rect x="12" y="12" width="8" height="8" rx="2" fill="#6c47ff"/>
+          </svg>
+          <span className="q-nav-label" style={{ color: 'var(--purple)' }}>Dashboard</span>
+          <div className="q-nav-dot"/>
         </Link>
-        <Link href="/documents" className="flex flex-col items-center gap-1">
-          <span className="text-gray-400 text-xl">◻</span>
-          <span className="text-xs text-gray-400">Documents</span>
+        <Link href="/documents" className="q-nav-item">
+          <svg width="22" height="22" viewBox="0 0 22 22" fill="none">
+            <path d="M5 3h12a2 2 0 012 2v12a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2zm2 5h8M7 11h8M7 15h5" stroke="#a8a5c0" strokeWidth="1.5" strokeLinecap="round"/>
+          </svg>
+          <span className="q-nav-label">Docs</span>
         </Link>
-        <Link href="/clients" className="flex flex-col items-center gap-1">
-          <span className="text-gray-400 text-xl">◻</span>
-          <span className="text-xs text-gray-400">Clients</span>
+        <Link href="/clients" className="q-nav-item">
+          <svg width="22" height="22" viewBox="0 0 22 22" fill="none">
+            <circle cx="11" cy="8" r="4" stroke="#a8a5c0" strokeWidth="1.5"/>
+            <path d="M3 20c0-4 3.6-7 8-7s8 3 8 7" stroke="#a8a5c0" strokeWidth="1.5" strokeLinecap="round"/>
+          </svg>
+          <span className="q-nav-label">Clients</span>
         </Link>
-        <Link href="/settings" className="flex flex-col items-center gap-1">
-          <span className="text-gray-400 text-xl">◻</span>
-          <span className="text-xs text-gray-400">Settings</span>
+        <Link href="/settings" className="q-nav-item">
+          <svg width="22" height="22" viewBox="0 0 22 22" fill="none">
+            <circle cx="11" cy="11" r="3" stroke="#a8a5c0" strokeWidth="1.5"/>
+            <path d="M11 2v2M11 18v2M2 11h2M18 11h2M4.9 4.9l1.4 1.4M15.7 15.7l1.4 1.4M4.9 17.1l1.4-1.4M15.7 6.3l1.4-1.4" stroke="#a8a5c0" strokeWidth="1.5"/>
+          </svg>
+          <span className="q-nav-label">Settings</span>
         </Link>
       </nav>
     </div>

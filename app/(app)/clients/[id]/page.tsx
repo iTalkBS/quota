@@ -5,6 +5,13 @@ import { createClient } from '@/lib/supabase'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 
+const AVATAR_COLORS = [
+  { bg: 'var(--purple-bg)', color: 'var(--purple)' },
+  { bg: 'var(--green-bg)', color: 'var(--green)' },
+  { bg: 'var(--orange-bg)', color: 'var(--orange)' },
+  { bg: 'var(--yellow-bg)', color: '#b38f00' },
+]
+
 export default function ClientDetailPage({ params }: { params: { id: string } }) {
   const router = useRouter()
   const supabase = createClient()
@@ -17,15 +24,11 @@ export default function ClientDetailPage({ params }: { params: { id: string } })
   const [email, setEmail] = useState('')
   const [address, setAddress] = useState('')
   const [saving, setSaving] = useState(false)
+  const [deleting, setDeleting] = useState(false)
 
   useEffect(() => {
-    const loadClient = async () => {
-      const { data: clientData } = await supabase
-        .from('clients')
-        .select('*')
-        .eq('id', params.id)
-        .single()
-
+    const load = async () => {
+      const { data: clientData } = await supabase.from('clients').select('*').eq('id', params.id).single()
       if (clientData) {
         setClient(clientData)
         setName(clientData.name)
@@ -33,25 +36,17 @@ export default function ClientDetailPage({ params }: { params: { id: string } })
         setEmail(clientData.email || '')
         setAddress(clientData.address || '')
       }
-
-      const { data: quotesData } = await supabase
-        .from('quotes')
-        .select('*')
-        .eq('client_id', params.id)
-        .order('created_at', { ascending: false })
-
+      const { data: quotesData } = await supabase.from('quotes').select('*').eq('client_id', params.id).order('created_at', { ascending: false })
       if (quotesData) setQuotes(quotesData)
       setLoading(false)
     }
-    loadClient()
+    load()
   }, [params.id])
 
   const handleSave = async () => {
+    if (!name) return
     setSaving(true)
-    await supabase
-      .from('clients')
-      .update({ name, phone, email, address })
-      .eq('id', params.id)
+    await supabase.from('clients').update({ name, phone, email, address }).eq('id', params.id)
     setClient({ ...client, name, phone, email, address })
     setSaving(false)
     setEditing(false)
@@ -59,161 +54,127 @@ export default function ClientDetailPage({ params }: { params: { id: string } })
 
   const handleDelete = async () => {
     if (!confirm('Delete this client? Their quotes will not be deleted.')) return
+    setDeleting(true)
     await supabase.from('clients').delete().eq('id', params.id)
     router.push('/clients')
   }
 
   const getStatusStyle = (status: string) => {
-    switch (status) {
-      case 'paid': return 'bg-green-100 text-green-700'
-      case 'unpaid': return 'bg-amber-100 text-amber-700'
-      case 'overdue': return 'bg-red-100 text-red-700'
-      case 'converted': return 'bg-purple-100 text-purple-700'
-      case 'sent': return 'bg-blue-100 text-blue-700'
-      default: return 'bg-gray-100 text-gray-600'
+    const map: Record<string, string> = {
+      paid: 'badge-paid', unpaid: 'badge-unpaid', overdue: 'badge-overdue',
+      converted: 'badge-converted', sent: 'badge-sent', accepted: 'badge-accepted',
+      rejected: 'badge-rejected', draft: 'badge-draft',
     }
+    return map[status] || 'badge-draft'
   }
 
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <p className="text-gray-400 text-sm">Loading...</p>
-      </div>
-    )
-  }
+  const getInitials = (n: string) => n.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2)
+  const getColor = (n: string) => AVATAR_COLORS[n.charCodeAt(0) % AVATAR_COLORS.length]
 
-  if (!client) {
-    return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <p className="text-gray-400 text-sm">Client not found</p>
-      </div>
-    )
-  }
+  if (loading) return <div className="q-page"><div className="q-loading">Loading...</div></div>
+  if (!client) return <div className="q-page"><div className="q-loading">Client not found</div></div>
+
+  const color = getColor(client.name)
 
   return (
-    <div className="min-h-screen bg-gray-50 pb-10">
-      <div className="bg-white border-b border-gray-100 px-6 py-4 flex items-center gap-4">
-        <button onClick={() => router.back()} className="text-gray-500 text-lg">←</button>
-        <h1 className="text-lg font-bold text-gray-900 flex-1">{client.name}</h1>
+    <div className="q-page">
+      <div className="q-topbar">
+        <button className="q-back-btn" onClick={() => router.back()}>
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+            <path d="M9 2L4 7l5 5" stroke="#6c47ff" strokeWidth="2" strokeLinecap="round"/>
+          </svg>
+        </button>
+        <div className="q-topbar-title">{client.name}</div>
         <button
           onClick={() => setEditing(!editing)}
-          className="text-green-600 text-sm font-medium"
+          style={{ background: editing ? 'var(--purple-bg)' : 'none', border: 'none', cursor: 'pointer', fontSize: 13, fontWeight: 700, color: 'var(--purple)', padding: '6px 10px', borderRadius: 8 }}
         >
           {editing ? 'Cancel' : 'Edit'}
         </button>
       </div>
 
-      <div className="px-6 py-6 space-y-4">
-        <div className="bg-white border border-gray-100 rounded-2xl p-4 space-y-4">
-          <h2 className="text-base font-semibold text-gray-900">Client details</h2>
+      <div className="q-scroll">
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '20px 0 24px' }}>
+          <div className="q-avatar" style={{ width: 64, height: 64, fontSize: 22, background: color.bg, color: color.color, marginBottom: 12 }}>
+            {getInitials(client.name)}
+          </div>
+          <div style={{ fontSize: 20, fontWeight: 800, color: 'var(--text)' }}>{client.name}</div>
+          {client.phone && <div style={{ fontSize: 13, color: 'var(--text3)', marginTop: 4 }}>{client.phone}</div>}
+        </div>
+
+        <div className="q-card" style={{ padding: 20, marginBottom: 12 }}>
+          <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--purple)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 14 }}>Client details</div>
 
           {editing ? (
-            <div className="space-y-3">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Name <span className="text-red-500">*</span></label>
-                <input
-                  type="text"
-                  value={name}
-                  onChange={e => setName(e.target.value)}
-                  className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-green-500 text-gray-900"
-                />
+            <div>
+              <div className="q-form-group">
+                <label className="q-label">Name <span style={{ color: 'var(--red)' }}>*</span></label>
+                <input className="q-input" value={name} onChange={e => setName(e.target.value)} placeholder="Client name"/>
               </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Phone</label>
-                <input
-                  type="tel"
-                  value={phone}
-                  onChange={e => setPhone(e.target.value)}
-                  className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-green-500 text-gray-900"
-                />
+              <div className="q-form-group">
+                <label className="q-label">Phone</label>
+                <input className="q-input" type="tel" value={phone} onChange={e => setPhone(e.target.value)} placeholder="+27 123 456 789"/>
               </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
-                <input
-                  type="email"
-                  value={email}
-                  onChange={e => setEmail(e.target.value)}
-                  className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-green-500 text-gray-900"
-                />
+              <div className="q-form-group">
+                <label className="q-label">Email</label>
+                <input className="q-input" type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="client@example.com"/>
               </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Address</label>
-                <input
-                  type="text"
-                  value={address}
-                  onChange={e => setAddress(e.target.value)}
-                  className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-green-500 text-gray-900"
-                />
+              <div className="q-form-group">
+                <label className="q-label">Address</label>
+                <input className="q-input" value={address} onChange={e => setAddress(e.target.value)} placeholder="Client address"/>
               </div>
-              <button
-                onClick={handleSave}
-                disabled={saving}
-                className="w-full bg-green-600 text-white py-3 rounded-xl font-medium disabled:opacity-50"
-              >
+              <button onClick={handleSave} disabled={saving || !name} className="q-btn-primary">
                 {saving ? 'Saving...' : 'Save changes'}
               </button>
             </div>
           ) : (
-            <div className="space-y-2">
-              {client.phone && (
-                <div className="flex gap-3">
-                  <span className="text-xs text-gray-400 w-16">Phone</span>
-                  <span className="text-sm text-gray-900">{client.phone}</span>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+              {[
+                { label: 'Phone', value: client.phone },
+                { label: 'Email', value: client.email },
+                { label: 'Address', value: client.address },
+              ].filter(f => f.value).map(f => (
+                <div key={f.label} style={{ display: 'flex', gap: 12 }}>
+                  <div style={{ fontSize: 12, color: 'var(--text3)', width: 60, fontWeight: 600, paddingTop: 1 }}>{f.label}</div>
+                  <div style={{ fontSize: 14, color: 'var(--text)', flex: 1 }}>{f.value}</div>
                 </div>
-              )}
-              {client.email && (
-                <div className="flex gap-3">
-                  <span className="text-xs text-gray-400 w-16">Email</span>
-                  <span className="text-sm text-gray-900">{client.email}</span>
-                </div>
-              )}
-              {client.address && (
-                <div className="flex gap-3">
-                  <span className="text-xs text-gray-400 w-16">Address</span>
-                  <span className="text-sm text-gray-900">{client.address}</span>
-                </div>
-              )}
-            </div>
-          )}
-        </div>
-
-        <div className="bg-white border border-gray-100 rounded-2xl p-4">
-          <h2 className="text-base font-semibold text-gray-900 mb-3">
-            Documents ({quotes.length})
-          </h2>
-          {quotes.length === 0 ? (
-            <p className="text-sm text-gray-400">No documents yet</p>
-          ) : (
-            <div className="space-y-2">
-              {quotes.map(quote => (
-                <Link
-                  key={quote.id}
-                  href={`/documents/${quote.id}`}
-                  className="flex justify-between items-center py-2 border-b border-gray-50 last:border-0"
-                >
-                  <div>
-                    <p className="text-sm font-medium text-gray-900">{quote.quote_number}</p>
-                    <p className="text-xs text-gray-400">{quote.issue_date}</p>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span className={`text-xs font-medium px-2 py-1 rounded-full ${getStatusStyle(quote.status)}`}>
-                      {quote.status.toUpperCase()}
-                    </span>
-                    <span className="text-sm font-bold text-gray-900">
-                      {quote.currency_symbol}{Number(quote.total).toFixed(2)}
-                    </span>
-                  </div>
-                </Link>
               ))}
+              {!client.phone && !client.email && !client.address && (
+                <div style={{ fontSize: 13, color: 'var(--text3)' }}>No additional details</div>
+              )}
             </div>
           )}
         </div>
 
-        <button
-          onClick={handleDelete}
-          className="w-full border border-red-200 text-red-500 py-3 rounded-xl font-medium text-base"
-        >
-          Delete client
+        <div className="q-card" style={{ padding: 20, marginBottom: 12 }}>
+          <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--purple)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 14 }}>
+            Documents ({quotes.length})
+          </div>
+          {quotes.length === 0 ? (
+            <div style={{ fontSize: 13, color: 'var(--text3)' }}>No documents yet</div>
+          ) : (
+            quotes.map(quote => (
+              <Link key={quote.id} href={`/documents/${quote.id}`} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 0', borderBottom: '1px solid var(--border)', textDecoration: 'none', color: 'inherit' }}>
+                <div>
+                  <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)' }}>{quote.quote_number}</div>
+                  <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 2 }}>{quote.issue_date}</div>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <span className={`q-badge ${getStatusStyle(quote.status)}`}>{quote.status.toUpperCase()}</span>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text)' }}>
+                    {quote.currency_symbol}{Number(quote.total).toLocaleString()}
+                  </div>
+                </div>
+              </Link>
+            ))
+          )}
+        </div>
+
+        <button onClick={handleDelete} disabled={deleting} className="q-btn-danger">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+            <path d="M3 4h10M5 4V3h6v1M6 7v5M10 7v5M4 4l1 9h6l1-9" stroke="#ff4060" strokeWidth="1.5" strokeLinecap="round"/>
+          </svg>
+          {deleting ? 'Deleting...' : 'Delete client'}
         </button>
       </div>
     </div>
