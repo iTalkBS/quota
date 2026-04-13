@@ -12,16 +12,24 @@ export default function QuoteDetailPage({ params }: { params: { id: string } }) 
   const [items, setItems] = useState<any[]>([])
   const [client, setClient] = useState<any>(null)
   const [profile, setProfile] = useState<any>(null)
+  const [payments, setPayments] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
+  const [showPaymentForm, setShowPaymentForm] = useState(false)
+  const [paymentAmount, setPaymentAmount] = useState('')
+  const [paymentDate, setPaymentDate] = useState(new Date().toISOString().split('T')[0])
+  const [paymentMethod, setPaymentMethod] = useState('eft')
+  const [paymentNote, setPaymentNote] = useState('')
+  const [savingPayment, setSavingPayment] = useState(false)
 
   useEffect(() => {
     const load = async () => {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) return
-      const [{ data: p }, { data: q }, { data: i }] = await Promise.all([
+      const [{ data: p }, { data: q }, { data: i }, { data: pay }] = await Promise.all([
         supabase.from('profiles').select('*').eq('id', user.id).single(),
         supabase.from('quotes').select('*').eq('id', params.id).single(),
         supabase.from('quote_items').select('*').eq('quote_id', params.id),
+        supabase.from('payments').select('*').eq('quote_id', params.id).order('payment_date'),
       ])
       if (p) setProfile(p)
       if (q) {
@@ -32,16 +40,58 @@ export default function QuoteDetailPage({ params }: { params: { id: string } }) 
         }
       }
       if (i) setItems(i)
+      if (pay) setPayments(pay)
       setLoading(false)
     }
     load()
   }, [params.id])
 
+  const totalPaid = payments.reduce((sum, p) => sum + Number(p.amount), 0)
+  const balance = quote ? Number(quote.total) - totalPaid : 0
+  const isFullyPaid = balance <= 0
+
+  const handleAddPayment = async () => {
+    if (!paymentAmount || parseFloat(paymentAmount) <= 0) return
+    setSavingPayment(true)
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) return
+    const { data: newPayment } = await supabase.from('payments').insert({
+      quote_id: params.id, user_id: user.id,
+      amount: parseFloat(paymentAmount), payment_date: paymentDate,
+      method: paymentMethod, note: paymentNote,
+    }).select().single()
+    if (newPayment) {
+      const updatedPayments = [...payments, newPayment]
+      const newTotalPaid = updatedPayments.reduce((sum, p) => sum + Number(p.amount), 0)
+      const newBalance = Number(quote.total) - newTotalPaid
+      const newStatus = newBalance <= 0 ? 'paid' : 'unpaid'
+      await supabase.from('quotes').update({ amount_paid: newTotalPaid, status: newStatus }).eq('id', params.id)
+      setPayments(updatedPayments)
+      setQuote({ ...quote, amount_paid: newTotalPaid, status: newStatus })
+      setPaymentAmount('')
+      setPaymentNote('')
+      setShowPaymentForm(false)
+    }
+    setSavingPayment(false)
+  }
+
+  const handleDeletePayment = async (paymentId: string) => {
+    if (!confirm('Remove this payment?')) return
+    await supabase.from('payments').delete().eq('id', paymentId)
+    const updatedPayments = payments.filter(p => p.id !== paymentId)
+    const newTotalPaid = updatedPayments.reduce((sum, p) => sum + Number(p.amount), 0)
+    const newBalance = Number(quote.total) - newTotalPaid
+    const newStatus = newBalance <= 0 ? 'paid' : 'unpaid'
+    await supabase.from('quotes').update({ amount_paid: newTotalPaid, status: newStatus }).eq('id', params.id)
+    setPayments(updatedPayments)
+    setQuote({ ...quote, amount_paid: newTotalPaid, status: newStatus })
+  }
+
   const handleWhatsApp = () => {
     if (!client?.phone) return
     const phone = client.phone.replace(/\D/g, '')
     const message = encodeURIComponent(
-      `Hello ${client.name},\n\nPlease find attached your ${quote.type === 'quote' ? 'quotation' : 'invoice'} ${quote.quote_number} from ${profile?.business_name}.\n\nTotal: ${quote.currency_symbol} ${Number(quote.total).toLocaleString()}\n\nThank you for your business.`
+      `Hello ${client.name},\n\nPlease find attached your ${quote.type === 'quote' ? 'quotation' : 'invoice'} ${quote.quote_number} from ${profile?.business_name}.\n\nTotal: ${quote.currency_symbol} ${Number(quote.total).toLocaleString()}${balance > 0 && quote.type === 'invoice' ? `\nBalance due: ${quote.currency_symbol} ${balance.toLocaleString()}` : ''}\n\nThank you for your business.`
     )
     window.open(`https://wa.me/${phone}?text=${message}`, '_blank')
   }
@@ -51,12 +101,15 @@ export default function QuoteDetailPage({ params }: { params: { id: string } }) 
     if (!user) return
     const { count } = await supabase.from('quotes').select('*', { count: 'exact', head: true }).eq('user_id', user.id).eq('type', 'invoice')
     const invoiceNumber = `INV-${new Date().getFullYear()}-${String((count || 0) + 1).padStart(4, '0')}`
+    const dueDate = new Date()
+    dueDate.setDate(dueDate.getDate() + 30)
     const { data: invoice } = await supabase.from('quotes').insert({
       user_id: user.id, client_id: quote.client_id, quote_number: invoiceNumber,
       type: 'invoice', status: 'unpaid', currency_code: quote.currency_code,
       currency_symbol: quote.currency_symbol, vat_rate: quote.vat_rate,
       subtotal: quote.subtotal, vat_amount: quote.vat_amount, total: quote.total,
       notes: quote.notes, issue_date: new Date().toISOString().split('T')[0],
+      due_date: dueDate.toISOString().split('T')[0], amount_paid: 0,
     }).select().single()
     if (invoice) {
       await Promise.all([
@@ -65,11 +118,6 @@ export default function QuoteDetailPage({ params }: { params: { id: string } }) 
       ])
       router.push(`/documents/${invoice.id}`)
     }
-  }
-
-  const handleMarkPaid = async () => {
-    await supabase.from('quotes').update({ status: 'paid' }).eq('id', quote.id)
-    setQuote({ ...quote, status: 'paid' })
   }
 
   const getStatusStyle = (status: string) => {
@@ -81,10 +129,23 @@ export default function QuoteDetailPage({ params }: { params: { id: string } }) 
     return map[status] || 'badge-draft'
   }
 
+  const getMethodLabel = (method: string) => {
+    const map: Record<string, string> = { eft: 'EFT / Bank transfer', cash: 'Cash', mobile_money: 'Mobile money', other: 'Other' }
+    return map[method] || method
+  }
+
   if (loading) return <div className="q-page"><div className="q-loading">Loading...</div></div>
   if (!quote) return <div className="q-page"><div className="q-loading">Document not found</div></div>
 
   const isInvoice = quote.type === 'invoice'
+  const isOverdue = isInvoice && quote.due_date && new Date(quote.due_date) < new Date() && !isFullyPaid
+
+  const ActionBtn = ({ onClick, icon, label, bg, color }: any) => (
+    <button onClick={onClick} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, background: bg, border: 'none', borderRadius: 12, padding: '10px 8px', cursor: 'pointer', width: 56, boxShadow: '0 2px 8px rgba(0,0,0,0.08)' }}>
+      {icon}
+      <span style={{ fontSize: 10, fontWeight: 700, color, textAlign: 'center', lineHeight: 1.2 }}>{label}</span>
+    </button>
+  )
 
   return (
     <div className="q-page">
@@ -95,10 +156,49 @@ export default function QuoteDetailPage({ params }: { params: { id: string } }) 
           </svg>
         </button>
         <div className="q-topbar-title">{quote.quote_number}</div>
-        <span className={`q-badge ${getStatusStyle(quote.status)}`}>{quote.status.toUpperCase()}</span>
+        <span className={`q-badge ${isOverdue ? 'badge-overdue' : getStatusStyle(quote.status)}`}>
+          {isOverdue ? 'OVERDUE' : quote.status.toUpperCase()}
+        </span>
       </div>
 
-      <div className="q-scroll">
+      <div className="q-scroll" style={{ paddingRight: 72 }}>
+        {showPaymentForm && (
+          <div className="q-card" style={{ padding: 20, marginBottom: 12 }}>
+            <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--green)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 14 }}>Record payment</div>
+            <div style={{ background: 'var(--green-bg)', borderRadius: 10, padding: '10px 14px', marginBottom: 14, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span style={{ fontSize: 12, color: 'var(--green)', fontWeight: 600 }}>Balance due</span>
+              <span style={{ fontSize: 16, fontWeight: 800, color: 'var(--green)' }}>{quote.currency_symbol} {balance.toLocaleString()}</span>
+            </div>
+            <div className="q-form-group">
+              <label className="q-label">Amount <span style={{ color: 'var(--red)' }}>*</span></label>
+              <input className="q-input" type="number" value={paymentAmount} onChange={e => setPaymentAmount(e.target.value)} onFocus={e => e.target.select()} placeholder={`Max: ${quote.currency_symbol} ${balance.toLocaleString()}`} min="0"/>
+            </div>
+            <div className="q-form-group">
+              <label className="q-label">Payment date</label>
+              <input className="q-input" type="date" value={paymentDate} onChange={e => setPaymentDate(e.target.value)}/>
+            </div>
+            <div className="q-form-group">
+              <label className="q-label">Payment method</label>
+              <select className="q-select" value={paymentMethod} onChange={e => setPaymentMethod(e.target.value)}>
+                <option value="eft">EFT / Bank transfer</option>
+                <option value="cash">Cash</option>
+                <option value="mobile_money">Mobile money</option>
+                <option value="other">Other</option>
+              </select>
+            </div>
+            <div className="q-form-group">
+              <label className="q-label">Note (optional)</label>
+              <input className="q-input" value={paymentNote} onChange={e => setPaymentNote(e.target.value)} placeholder="e.g. 50% deposit"/>
+            </div>
+            <div style={{ display: 'flex', gap: 10 }}>
+              <button onClick={() => setShowPaymentForm(false)} className="q-btn-secondary" style={{ flex: 1 }}>Cancel</button>
+              <button onClick={handleAddPayment} disabled={savingPayment || !paymentAmount} className="q-btn-primary" style={{ flex: 1, background: 'linear-gradient(135deg, var(--green), var(--green-light))' }}>
+                {savingPayment ? 'Saving...' : 'Record'}
+              </button>
+            </div>
+          </div>
+        )}
+
         <div className="q-card" style={{ padding: 20, marginBottom: 12 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16 }}>
             <div>
@@ -127,12 +227,18 @@ export default function QuoteDetailPage({ params }: { params: { id: string } }) 
             </div>
           )}
 
-          <div style={{ display: 'flex', gap: 20, marginBottom: 14 }}>
+          <div style={{ display: 'flex', gap: 20, marginBottom: 14, flexWrap: 'wrap' }}>
             <div>
               <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 4 }}>Issue date</div>
               <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text)' }}>{quote.issue_date}</div>
             </div>
-            {quote.expiry_date && (
+            {isInvoice && quote.due_date && (
+              <div>
+                <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 4 }}>Payment due</div>
+                <div style={{ fontSize: 13, fontWeight: 700, color: isOverdue ? 'var(--red)' : 'var(--text)' }}>{quote.due_date}</div>
+              </div>
+            )}
+            {!isInvoice && quote.expiry_date && (
               <div>
                 <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 4 }}>Valid until</div>
                 <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text)' }}>{quote.expiry_date}</div>
@@ -167,20 +273,28 @@ export default function QuoteDetailPage({ params }: { params: { id: string } }) 
 
           <div style={{ marginTop: 14 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, color: 'var(--text2)', marginBottom: 6 }}>
-              <span>Subtotal</span>
-              <span>{quote.currency_symbol} {Number(quote.subtotal).toLocaleString()}</span>
+              <span>Subtotal</span><span>{quote.currency_symbol} {Number(quote.subtotal).toLocaleString()}</span>
             </div>
             {Number(quote.vat_rate) > 0 && (
               <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, color: 'var(--text2)', marginBottom: 6 }}>
-                <span>VAT ({quote.vat_rate}%)</span>
-                <span>{quote.currency_symbol} {Number(quote.vat_amount).toLocaleString()}</span>
+                <span>VAT ({quote.vat_rate}%)</span><span>{quote.currency_symbol} {Number(quote.vat_amount).toLocaleString()}</span>
               </div>
             )}
             <div className="q-divider" style={{ margin: '10px 0' }}/>
             <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 16, fontWeight: 800, color: 'var(--text)' }}>
-              <span>Total</span>
-              <span>{quote.currency_symbol} {Number(quote.total).toLocaleString()}</span>
+              <span>Total</span><span>{quote.currency_symbol} {Number(quote.total).toLocaleString()}</span>
             </div>
+            {isInvoice && totalPaid > 0 && (
+              <>
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, color: 'var(--green)', marginTop: 8 }}>
+                  <span>Amount paid</span><span>{quote.currency_symbol} {totalPaid.toLocaleString()}</span>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 15, fontWeight: 800, color: balance > 0 ? 'var(--orange)' : 'var(--green)', marginTop: 6, padding: '8px 0', borderTop: '1px solid var(--border)' }}>
+                  <span>{balance > 0 ? 'Balance due' : 'Fully paid'}</span>
+                  <span>{quote.currency_symbol} {Math.max(0, balance).toLocaleString()}</span>
+                </div>
+              </>
+            )}
           </div>
 
           {quote.notes && (
@@ -192,43 +306,69 @@ export default function QuoteDetailPage({ params }: { params: { id: string } }) 
           )}
         </div>
 
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 20 }}>
-          <button onClick={() => window.open(`/api/pdf?id=${quote.id}`, '_blank')} className="q-btn-secondary">
-            <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
-              <path d="M9 2v10M5 8l4 4 4-4" stroke="var(--text)" strokeWidth="1.5" strokeLinecap="round"/>
-              <path d="M3 14h12" stroke="var(--text)" strokeWidth="1.5" strokeLinecap="round"/>
-            </svg>
-            Download PDF
-          </button>
+        {isInvoice && payments.length > 0 && (
+          <div className="q-card" style={{ padding: 20, marginBottom: 12 }}>
+            <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--purple)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 14 }}>Payment history</div>
+            {payments.map((payment, i) => (
+              <div key={payment.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', padding: '10px 0', borderBottom: i < payments.length - 1 ? '1px solid var(--border)' : 'none' }}>
+                <div>
+                  <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--green)' }}>{quote.currency_symbol} {Number(payment.amount).toLocaleString()}</div>
+                  <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 2 }}>{payment.payment_date} · {getMethodLabel(payment.method)}</div>
+                  {payment.note && <div style={{ fontSize: 11, color: 'var(--text3)' }}>{payment.note}</div>}
+                </div>
+                <button onClick={() => handleDeletePayment(payment.id)} className="q-icon-btn" style={{ background: 'var(--red-bg)' }}>
+                  <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+                    <path d="M2 3.5h10M4.5 3.5V2.5h5v1M5.5 6v4M8.5 6v4M3 3.5l.8 8h6.4l.8-8" stroke="#ff4060" strokeWidth="1.3" strokeLinecap="round"/>
+                  </svg>
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
 
-          {client?.phone && (
-            <button onClick={handleWhatsApp} className="q-btn-green">
-              <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
-                <path d="M9 1.5A7.5 7.5 0 0116.5 9c0 4.14-3.36 7.5-7.5 7.5a7.44 7.44 0 01-3.75-1L1.5 16.5l1.04-3.19A7.44 7.44 0 011.5 9 7.5 7.5 0 019 1.5z" stroke="#fff" strokeWidth="1.5"/>
-                <path d="M6.5 7.5c.5 1 1.5 2.5 3.5 3.5" stroke="#fff" strokeWidth="1.5" strokeLinecap="round"/>
-              </svg>
-              Share via WhatsApp
-            </button>
-          )}
-
-          {!isInvoice && quote.status !== 'converted' && (
-            <button onClick={handleConvertToInvoice} className="q-btn-primary" style={{ background: 'linear-gradient(135deg, var(--orange), #ff9a5c)' }}>
-              <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
-                <path d="M3 9h12M10 4l5 5-5 5" stroke="#fff" strokeWidth="1.5" strokeLinecap="round"/>
-              </svg>
-              Convert to Invoice
-            </button>
-          )}
-
-          {isInvoice && quote.status === 'unpaid' && (
-            <button onClick={handleMarkPaid} className="q-btn-primary" style={{ background: 'linear-gradient(135deg, var(--green), var(--green-light))' }}>
-              <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
-                <path d="M3 9l4 4 8-8" stroke="#fff" strokeWidth="2" strokeLinecap="round"/>
-              </svg>
-              Mark as Paid
-            </button>
-          )}
-        </div>
+      <div style={{ position: 'fixed', right: 10, top: '50%', transform: 'translateY(-50%)', display: 'flex', flexDirection: 'column', gap: 8, zIndex: 50 }}>
+        <ActionBtn
+          onClick={() => window.open(`/api/pdf?id=${quote.id}`, '_blank')}
+          icon={<svg width="20" height="20" viewBox="0 0 20 20" fill="none"><path d="M10 2v11M6 9l4 4 4-4" stroke="#6c47ff" strokeWidth="1.5" strokeLinecap="round"/><path d="M4 15h12" stroke="#6c47ff" strokeWidth="1.5" strokeLinecap="round"/></svg>}
+          label="PDF"
+          bg="var(--purple-bg)"
+          color="var(--purple)"
+        />
+        {client?.phone && (
+          <ActionBtn
+            onClick={handleWhatsApp}
+            icon={<svg width="20" height="20" viewBox="0 0 20 20" fill="none"><path d="M10 1.5A8.5 8.5 0 0118.5 10c0 4.69-3.81 8.5-8.5 8.5a8.44 8.44 0 01-4.25-1.14L1.5 18.5l1.18-3.62A8.44 8.44 0 011.5 10 8.5 8.5 0 0110 1.5z" stroke="#00c27a" strokeWidth="1.5"/><path d="M7 9c.57 1.14 1.71 2.86 4 4" stroke="#00c27a" strokeWidth="1.5" strokeLinecap="round"/></svg>}
+            label="WA"
+            bg="var(--green-bg)"
+            color="var(--green)"
+          />
+        )}
+        <ActionBtn
+          onClick={() => router.push(`/documents/${params.id}/edit`)}
+          icon={<svg width="20" height="20" viewBox="0 0 20 20" fill="none"><path d="M13.5 3.5l3 3L7 16H4v-3L13.5 3.5z" stroke="#ff7a2f" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>}
+          label="Edit"
+          bg="var(--orange-bg)"
+          color="var(--orange)"
+        />
+        {isInvoice && !isFullyPaid && (
+          <ActionBtn
+            onClick={() => setShowPaymentForm(!showPaymentForm)}
+            icon={<svg width="20" height="20" viewBox="0 0 20 20" fill="none"><rect x="2" y="5" width="16" height="12" rx="2" stroke="#00c27a" strokeWidth="1.5"/><path d="M2 9h16M6 13h2M10 13h2" stroke="#00c27a" strokeWidth="1.5" strokeLinecap="round"/></svg>}
+            label="Pay"
+            bg={showPaymentForm ? 'var(--green-bg)' : 'var(--white)'}
+            color="var(--green)"
+          />
+        )}
+        {!isInvoice && quote.status !== 'converted' && (
+          <ActionBtn
+            onClick={handleConvertToInvoice}
+            icon={<svg width="20" height="20" viewBox="0 0 20 20" fill="none"><path d="M4 10h12M11 5l5 5-5 5" stroke="#ff7a2f" strokeWidth="1.5" strokeLinecap="round"/></svg>}
+            label="Invoice"
+            bg="var(--orange-bg)"
+            color="var(--orange)"
+          />
+        )}
       </div>
 
       <nav className="q-bottomnav">
