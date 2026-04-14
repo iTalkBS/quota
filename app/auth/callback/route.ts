@@ -4,6 +4,7 @@ import { NextResponse } from 'next/server'
 export async function GET(request: Request) {
   const { searchParams, origin } = new URL(request.url)
   const code = searchParams.get('code')
+  const next = searchParams.get('next') || '/dashboard'
 
   if (code) {
     const supabase = createClient()
@@ -17,12 +18,12 @@ export async function GET(request: Request) {
           .eq('id', user.id)
           .single()
         if (!profile?.business_name) {
-          return NextResponse.redirect(`${origin}/onboarding`)
+          return NextResponse.redirect(`${origin}/onboarding?welcome=1`)
         }
       }
-      return NextResponse.redirect(`${origin}/dashboard`)
+      return NextResponse.redirect(`${origin}/dashboard?confirmed=1`)
     }
   }
 
-  return NextResponse.redirect(`${origin}/login`)
+  return NextResponse.redirect(`${origin}/login?error=confirmation_failed`)
 }

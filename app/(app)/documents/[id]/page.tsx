@@ -72,6 +72,8 @@ export default function QuoteDetailPage({ params }: { params: { id: string } }) 
       setPaymentAmount('')
       setPaymentNote('')
       setShowPaymentForm(false)
+      clearCache('documents')
+      clearCache('dashboard')
     }
     setSavingPayment(false)
   }
@@ -86,66 +88,24 @@ export default function QuoteDetailPage({ params }: { params: { id: string } }) 
     await supabase.from('quotes').update({ amount_paid: newTotalPaid, status: newStatus }).eq('id', params.id)
     setPayments(updatedPayments)
     setQuote({ ...quote, amount_paid: newTotalPaid, status: newStatus })
+    clearCache('documents')
+    clearCache('dashboard')
   }
 
   const handleWhatsApp = () => {
     if (!client?.phone) return
     const rawPhone = client.phone.trim()
-    const phone = rawPhone.startsWith('+')
-      ? rawPhone.replace(/[^\d]/g, '')
-      : rawPhone.replace(/[^\d]/g, '')
+    const phone = rawPhone.replace(/[^\d]/g, '')
     const message = encodeURIComponent(
       `Hello ${client.name},\n\nPlease find attached your ${quote.type === 'quote' ? 'quotation' : 'invoice'} ${quote.quote_number} from ${profile?.business_name}.\n\nTotal: ${quote.currency_symbol} ${Number(quote.total).toLocaleString()}${balance > 0 && quote.type === 'invoice' ? `\nBalance due: ${quote.currency_symbol} ${balance.toLocaleString()}` : ''}\n\nThank you for your business.`
     )
     window.open(`https://wa.me/${phone}?text=${message}`, '_blank')
   }
 
-const handleUpdateStatus = async (newStatus: string) => {
-    await supabase.from('quotes').update({ status: newStatus }).eq('id', params.id)
-    setQuote({ ...quote, status: newStatus })
-    clearCache('dashboard')
-    clearCache('documents')
-  }
-
-  const handleDuplicate = async () => {
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) return
-    const { data: numberData } = await supabase
-      .rpc('get_next_quote_number', { uid: user.id, doc_type: quote.type })
-    const newNumber = numberData || `${quote.type === 'invoice' ? 'INV' : 'QUO'}-${new Date().getFullYear()}-${Date.now()}`
-    const { data: newDoc } = await supabase.from('quotes').insert({
-      user_id: user.id,
-      client_id: quote.client_id,
-      quote_number: newNumber,
-      type: quote.type,
-      status: 'draft',
-      currency_code: quote.currency_code,
-      currency_symbol: quote.currency_symbol,
-      vat_rate: quote.vat_rate,
-      subtotal: quote.subtotal,
-      vat_amount: quote.vat_amount,
-      total: quote.total,
-      notes: quote.notes,
-      issue_date: new Date().toISOString().split('T')[0],
-      expiry_date: quote.expiry_date,
-      due_date: quote.due_date,
-      amount_paid: 0,
-    }).select().single()
-    if (newDoc) {
-      await supabase.from('quote_items').insert(
-        items.map(item => ({ ...item, id: undefined, quote_id: newDoc.id }))
-      )
-      clearCache('dashboard')
-      clearCache('documents')
-      router.push(`/documents/${newDoc.id}`)
-    }
-  }
-
   const handleConvertToInvoice = async () => {
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return
-    const { data: numberData } = await supabase
-      .rpc('get_next_quote_number', { uid: user.id, doc_type: 'invoice' })
+    const { data: numberData } = await supabase.rpc('get_next_quote_number', { uid: user.id, doc_type: 'invoice' })
     const invoiceNumber = numberData || `INV-${new Date().getFullYear()}-${Date.now()}`
     const dueDate = new Date()
     dueDate.setDate(dueDate.getDate() + 30)
@@ -162,7 +122,39 @@ const handleUpdateStatus = async (newStatus: string) => {
         supabase.from('quote_items').insert(items.map(item => ({ ...item, id: undefined, quote_id: invoice.id }))),
         supabase.from('quotes').update({ status: 'converted' }).eq('id', quote.id),
       ])
+      clearCache('documents')
+      clearCache('dashboard')
       router.push(`/documents/${invoice.id}`)
+    }
+  }
+
+  const handleUpdateStatus = async (newStatus: string) => {
+    await supabase.from('quotes').update({ status: newStatus }).eq('id', params.id)
+    setQuote({ ...quote, status: newStatus })
+    clearCache('dashboard')
+    clearCache('documents')
+  }
+
+  const handleDuplicate = async () => {
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) return
+    const { data: numberData } = await supabase.rpc('get_next_quote_number', { uid: user.id, doc_type: quote.type })
+    const newNumber = numberData || `${quote.type === 'invoice' ? 'INV' : 'QUO'}-${new Date().getFullYear()}-${Date.now()}`
+    const { data: newDoc } = await supabase.from('quotes').insert({
+      user_id: user.id, client_id: quote.client_id, quote_number: newNumber,
+      type: quote.type, status: 'draft', currency_code: quote.currency_code,
+      currency_symbol: quote.currency_symbol, vat_rate: quote.vat_rate,
+      subtotal: quote.subtotal, vat_amount: quote.vat_amount, total: quote.total,
+      notes: quote.notes, issue_date: new Date().toISOString().split('T')[0],
+      expiry_date: quote.expiry_date, due_date: quote.due_date, amount_paid: 0,
+    }).select().single()
+    if (newDoc) {
+      await supabase.from('quote_items').insert(
+        items.map(item => ({ ...item, id: undefined, quote_id: newDoc.id }))
+      )
+      clearCache('dashboard')
+      clearCache('documents')
+      router.push(`/documents/${newDoc.id}`)
     }
   }
 
@@ -170,23 +162,53 @@ const handleUpdateStatus = async (newStatus: string) => {
     const map: Record<string, string> = {
       paid: 'badge-paid', unpaid: 'badge-unpaid', overdue: 'badge-overdue',
       converted: 'badge-converted', sent: 'badge-sent', accepted: 'badge-accepted',
-      rejected: 'badge-rejected', draft: 'badge-draft',
+      rejected: 'badge-rejected', draft: 'badge-draft', expired: 'badge-overdue',
     }
     return map[status] || 'badge-draft'
   }
 
   const getMethodLabel = (method: string) => {
-    const map: Record<string, string> = { eft: 'EFT / Bank transfer', cash: 'Cash', mobile_money: 'Mobile money', other: 'Other' }
+    const map: Record<string, string> = {
+      eft: 'EFT / Bank transfer', cash: 'Cash', mobile_money: 'Mobile money', other: 'Other'
+    }
     return map[method] || method
   }
 
-  if (loading) return <div className="q-page"><div className="q-loading">Loading...</div></div>
+  if (loading) return (
+    <div className="q-page">
+      <div className="q-topbar">
+        <button className="q-back-btn" onClick={() => router.back()}>
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+            <path d="M9 2L4 7l5 5" stroke="#6c47ff" strokeWidth="2" strokeLinecap="round"/>
+          </svg>
+        </button>
+        <div className="q-topbar-title">Document</div>
+        <div style={{ width: 34 }}/>
+      </div>
+      <div className="q-scroll">
+        <div className="q-skeleton-card" style={{ marginBottom: 12 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 16 }}>
+            <div>
+              <div className="q-skeleton" style={{ width: 140, height: 16, marginBottom: 8 }}/>
+              <div className="q-skeleton" style={{ width: 100, height: 12 }}/>
+            </div>
+            <div className="q-skeleton" style={{ width: 70, height: 26, borderRadius: 20 }}/>
+          </div>
+          <div className="q-skeleton" style={{ width: '100%', height: 1, marginBottom: 16 }}/>
+          <div className="q-skeleton" style={{ width: 120, height: 14, marginBottom: 8 }}/>
+          <div className="q-skeleton" style={{ width: 80, height: 12, marginBottom: 16 }}/>
+          <div className="q-skeleton" style={{ width: '100%', height: 80 }}/>
+        </div>
+      </div>
+    </div>
+  )
+
   if (!quote) return <div className="q-page"><div className="q-loading">Document not found</div></div>
 
   const isInvoice = quote.type === 'invoice'
   const isOverdue = isInvoice && quote.due_date && new Date(quote.due_date) < new Date() && !isFullyPaid
   const isExpired = !isInvoice && quote.expiry_date && new Date(quote.expiry_date) < new Date() && quote.status === 'sent'
-  
+
   const ActionBtn = ({ onClick, icon, label, bg, color }: any) => (
     <button onClick={onClick} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, background: bg, border: 'none', borderRadius: 12, padding: '10px 8px', cursor: 'pointer', width: 56, boxShadow: '0 2px 8px rgba(0,0,0,0.08)' }}>
       {icon}
@@ -288,7 +310,7 @@ const handleUpdateStatus = async (newStatus: string) => {
             {!isInvoice && quote.expiry_date && (
               <div>
                 <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 4 }}>Valid until</div>
-                <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text)' }}>{quote.expiry_date}</div>
+                <div style={{ fontSize: 13, fontWeight: 700, color: isExpired ? 'var(--red)' : 'var(--text)' }}>{quote.expiry_date}</div>
               </div>
             )}
           </div>
@@ -416,7 +438,6 @@ const handleUpdateStatus = async (newStatus: string) => {
             color="var(--orange)"
           />
         )}
-
         {!isInvoice && quote.status === 'sent' && (
           <ActionBtn
             onClick={() => handleUpdateStatus('accepted')}
@@ -426,7 +447,6 @@ const handleUpdateStatus = async (newStatus: string) => {
             color="var(--green)"
           />
         )}
-
         {!isInvoice && quote.status === 'sent' && (
           <ActionBtn
             onClick={() => handleUpdateStatus('rejected')}
@@ -436,7 +456,6 @@ const handleUpdateStatus = async (newStatus: string) => {
             color="var(--red)"
           />
         )}
-
         <ActionBtn
           onClick={handleDuplicate}
           icon={<svg width="20" height="20" viewBox="0 0 20 20" fill="none"><rect x="7" y="7" width="10" height="10" rx="2" stroke="#6c47ff" strokeWidth="1.5"/><path d="M13 7V5a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2" stroke="#6c47ff" strokeWidth="1.5" strokeLinecap="round"/></svg>}

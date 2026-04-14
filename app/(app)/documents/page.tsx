@@ -6,20 +6,26 @@ import { createClient } from '@/lib/supabase'
 import { getCached, setCached } from '@/lib/cache'
 
 const STATUS_FILTERS = {
-  quotes: ['all', 'sent', 'accepted', 'rejected', 'converted', 'expired'],
-  invoices: ['all', 'unpaid', 'paid', 'overdue'],
+  quotes: ['all', 'sent', 'draft', 'accepted', 'rejected', 'converted', 'expired'],
+  invoices: ['all', 'unpaid', 'partial', 'paid', 'overdue'],
 }
 
 const STATUS_LABELS: Record<string, string> = {
-  all: 'All', sent: 'Sent', accepted: 'Accepted', rejected: 'Rejected',
-  converted: 'Converted', unpaid: 'Unpaid', paid: 'Paid', overdue: 'Overdue', expired: 'Expired',
+  all: 'All', sent: 'Sent', draft: 'Draft', accepted: 'Accepted', rejected: 'Rejected',
+  converted: 'Converted', unpaid: 'Unpaid', partial: 'Partial', paid: 'Paid',
+  overdue: 'Overdue', expired: 'Expired',
 }
 
 const processQuotes = (quotes: any[]) => {
   const now = new Date().toISOString().split('T')[0]
   return quotes.map((quote: any) => {
-    if (quote.type === 'invoice' && quote.status === 'unpaid' && quote.due_date && quote.due_date < now) {
-      return { ...quote, status: 'overdue' }
+    if (quote.type === 'invoice') {
+      if (quote.status === 'unpaid' && quote.due_date && quote.due_date < now) {
+        return { ...quote, status: 'overdue' }
+      }
+      if ((quote.status === 'unpaid' || quote.status === 'partial') && Number(quote.amount_paid) > 0 && Number(quote.amount_paid) < Number(quote.total)) {
+        return { ...quote, status: 'partial' }
+      }
     }
     if (quote.type === 'quote' && quote.status === 'sent' && quote.expiry_date && quote.expiry_date < now) {
       return { ...quote, status: 'expired' }
@@ -68,6 +74,7 @@ export default function DocumentsPage() {
       paid: 'badge-paid', unpaid: 'badge-unpaid', overdue: 'badge-overdue',
       converted: 'badge-converted', sent: 'badge-sent', accepted: 'badge-accepted',
       rejected: 'badge-rejected', draft: 'badge-draft', expired: 'badge-overdue',
+      partial: 'badge-partial',
     }
     return map[status] || 'badge-draft'
   }

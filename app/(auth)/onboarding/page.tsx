@@ -8,6 +8,8 @@ import { countries } from '@/lib/countries'
 export default function OnboardingPage() {
   const router = useRouter()
   const supabase = createClient()
+  const searchParams = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : null
+  const isWelcome = searchParams?.get('welcome') === '1'
   const [businessName, setBusinessName] = useState('')
   const [phone, setPhone] = useState('')
   const [countryCode, setCountryCode] = useState('')
@@ -53,6 +55,13 @@ export default function OnboardingPage() {
       </div>
 
       <div style={{ flex: 1, background: 'var(--bg)', borderRadius: '24px 24px 0 0', padding: '32px 20px 40px' }}>
+        {isWelcome && (
+          <div style={{ background: 'var(--green-bg)', border: '1px solid rgba(0,194,122,0.3)', borderRadius: 'var(--radius-sm)', padding: '14px 16px', marginBottom: 20 }}>
+            <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--green)', marginBottom: 2 }}>Email confirmed</div>
+            <div style={{ fontSize: 13, color: 'var(--text2)' }}>Your account is active. Now let's set up your business.</div>
+          </div>
+        )}
+
         {error && <div className="q-error">{error}</div>}
 
         <div className="q-form-group">

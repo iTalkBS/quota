@@ -35,6 +35,7 @@ export default function NewQuotePage() {
   const [itemSuggestions, setItemSuggestions] = useState<any[]>([])
   const [activeItemIndex, setActiveItemIndex] = useState<number | null>(null)
   const [loading, setLoading] = useState(false)
+  const [pageLoading, setPageLoading] = useState(true)
   const [error, setError] = useState('')
 
   useEffect(() => {
@@ -55,6 +56,7 @@ export default function NewQuotePage() {
       if (c) setClients(c)
       const cachedDocs = getCached('documents')
       if (cachedDocs?.clients) setClients(cachedDocs.clients)
+      setPageLoading(false)
     }
     loadData()
   }, [])
@@ -196,6 +198,28 @@ export default function NewQuotePage() {
   const stepOneValid = selectedClient || (isNewClient && newClient.name && newClient.phone)
   const stepTwoValid = items.some(i => i.name && parseFloat(i.quantity) > 0 && parseFloat(i.unit_price) > 0)
   const uniqueCurrencies = Array.from(new Map(countries.map(c => [c.currency_code, c])).values())
+
+if (pageLoading) return (
+    <div className="q-page">
+      <div className="q-topbar">
+        <button className="q-back-btn" onClick={() => router.back()}>
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+            <path d="M9 2L4 7l5 5" stroke="#6c47ff" strokeWidth="2" strokeLinecap="round"/>
+          </svg>
+        </button>
+        <div className="q-topbar-title">New Quote</div>
+        <div style={{ width: 34 }}/>
+      </div>
+      <div className="q-scroll">
+        <div className="q-skeleton-card" style={{ marginBottom: 12 }}>
+          <div className="q-skeleton" style={{ width: 120, height: 14, marginBottom: 16 }}/>
+          <div className="q-skeleton" style={{ width: '100%', height: 48, marginBottom: 10 }}/>
+          <div className="q-skeleton" style={{ width: '100%', height: 48, marginBottom: 10 }}/>
+          <div className="q-skeleton" style={{ width: '100%', height: 48 }}/>
+        </div>
+      </div>
+    </div>
+  )
 
   return (
     <div className="q-page">
