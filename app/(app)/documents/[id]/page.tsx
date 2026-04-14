@@ -185,7 +185,8 @@ const handleUpdateStatus = async (newStatus: string) => {
 
   const isInvoice = quote.type === 'invoice'
   const isOverdue = isInvoice && quote.due_date && new Date(quote.due_date) < new Date() && !isFullyPaid
-
+  const isExpired = !isInvoice && quote.expiry_date && new Date(quote.expiry_date) < new Date() && quote.status === 'sent'
+  
   const ActionBtn = ({ onClick, icon, label, bg, color }: any) => (
     <button onClick={onClick} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, background: bg, border: 'none', borderRadius: 12, padding: '10px 8px', cursor: 'pointer', width: 56, boxShadow: '0 2px 8px rgba(0,0,0,0.08)' }}>
       {icon}
@@ -202,12 +203,12 @@ const handleUpdateStatus = async (newStatus: string) => {
           </svg>
         </button>
         <div className="q-topbar-title">{quote.quote_number}</div>
-        <span className={`q-badge ${isOverdue ? 'badge-overdue' : getStatusStyle(quote.status)}`}>
-          {isOverdue ? 'OVERDUE' : quote.status.toUpperCase()}
+        <span className={`q-badge ${isOverdue ? 'badge-overdue' : isExpired ? 'badge-overdue' : getStatusStyle(quote.status)}`}>
+          {isOverdue ? 'OVERDUE' : isExpired ? 'EXPIRED' : quote.status.toUpperCase()}
         </span>
       </div>
 
-      <div className="q-scroll" style={{ paddingRight: 72 }}>
+      <div className="q-scroll" style={{ paddingRight: 72, paddingBottom: 120 }}>
         {showPaymentForm && (
           <div className="q-card" style={{ padding: 20, marginBottom: 12 }}>
             <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--green)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 14 }}>Record payment</div>
@@ -373,7 +374,7 @@ const handleUpdateStatus = async (newStatus: string) => {
         )}
       </div>
 
-      <div style={{ position: 'fixed', right: 10, top: '50%', transform: 'translateY(-50%)', display: 'flex', flexDirection: 'column', gap: 8, zIndex: 50 }}>
+      <div style={{ position: 'fixed', right: 10, top: '40%', transform: 'translateY(-50%)', display: 'flex', flexDirection: 'column', gap: 8, zIndex: 50 }}>
         <ActionBtn
           onClick={() => window.open(`/api/pdf?id=${quote.id}`, '_blank')}
           icon={<svg width="20" height="20" viewBox="0 0 20 20" fill="none"><path d="M10 2v11M6 9l4 4 4-4" stroke="#6c47ff" strokeWidth="1.5" strokeLinecap="round"/><path d="M4 15h12" stroke="#6c47ff" strokeWidth="1.5" strokeLinecap="round"/></svg>}

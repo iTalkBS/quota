@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react'
 import { createClient } from '@/lib/supabase'
 import { useRouter } from 'next/navigation'
 import { countries } from '@/lib/countries'
+import { clearCache } from '@/lib/cache'
 
 type Item = { id?: string; name: string; description: string; item_type: 'product' | 'service'; quantity: string; unit_price: string; line_total: number }
 type Client = { id: string; name: string; email: string; phone: string; address: string }
@@ -190,6 +191,8 @@ export default function EditDocumentPage({ params }: { params: { id: string } })
       )
     }
 
+    clearCache('dashboard')
+    clearCache('documents')
     router.push(`/documents/${params.id}`)
   }
 

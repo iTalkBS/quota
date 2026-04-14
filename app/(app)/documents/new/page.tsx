@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react'
 import { createClient } from '@/lib/supabase'
 import { useRouter } from 'next/navigation'
 import { countries } from '@/lib/countries'
-import { clearCache } from '@/lib/cache'
+import { clearCache, getCached } from '@/lib/cache'
 
 type Client = { id: string; name: string; email: string; phone: string; address: string }
 type Item = { name: string; description: string; item_type: 'product' | 'service'; quantity: string; unit_price: string; line_total: number }
@@ -53,6 +53,8 @@ export default function NewQuotePage() {
         if (Number(p.default_vat_rate) > 0) setVatEnabled(true)
       }
       if (c) setClients(c)
+      const cachedDocs = getCached('documents')
+      if (cachedDocs?.clients) setClients(cachedDocs.clients)
     }
     loadData()
   }, [])

@@ -94,7 +94,8 @@ export async function GET(request: NextRequest) {
     const isInvoice = quote.type === 'invoice'
     const hasBanking = profile?.bank_name || profile?.bank_account_number
     const totalPaid = (payments || []).reduce((sum: number, p: any) => sum + Number(p.amount), 0)
-    const balance = Number(quote.total) - totalPaid
+    const balance = Math.max(0, Number(quote.total) - totalPaid)
+    const isFullyPaid = balance <= 0
     const isOverdue = isInvoice && quote.due_date && new Date(quote.due_date) < new Date() && balance > 0
 
     const getMethodLabel = (method: string) => {
@@ -191,7 +192,7 @@ export async function GET(request: NextRequest) {
               <Text style={styles.totalLabel}>Total</Text>
               <Text style={styles.totalValue}>{quote.currency_symbol}{Number(quote.total).toLocaleString()}</Text>
             </View>
-            {isInvoice && totalPaid > 0 && (
+            {isInvoice && payments && payments.length > 0 && (
               <>
                 <View style={styles.paidRow}>
                   <Text style={styles.paidLabel}>Amount paid</Text>

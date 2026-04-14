@@ -6,13 +6,26 @@ import { createClient } from '@/lib/supabase'
 import { getCached, setCached } from '@/lib/cache'
 
 const STATUS_FILTERS = {
-  quotes: ['all', 'sent', 'accepted', 'rejected', 'converted'],
+  quotes: ['all', 'sent', 'accepted', 'rejected', 'converted', 'expired'],
   invoices: ['all', 'unpaid', 'paid', 'overdue'],
 }
 
 const STATUS_LABELS: Record<string, string> = {
   all: 'All', sent: 'Sent', accepted: 'Accepted', rejected: 'Rejected',
-  converted: 'Converted', unpaid: 'Unpaid', paid: 'Paid', overdue: 'Overdue',
+  converted: 'Converted', unpaid: 'Unpaid', paid: 'Paid', overdue: 'Overdue', expired: 'Expired',
+}
+
+const processQuotes = (quotes: any[]) => {
+  const now = new Date().toISOString().split('T')[0]
+  return quotes.map((quote: any) => {
+    if (quote.type === 'invoice' && quote.status === 'unpaid' && quote.due_date && quote.due_date < now) {
+      return { ...quote, status: 'overdue' }
+    }
+    if (quote.type === 'quote' && quote.status === 'sent' && quote.expiry_date && quote.expiry_date < now) {
+      return { ...quote, status: 'expired' }
+    }
+    return quote
+  })
 }
 
 export default function DocumentsPage() {
@@ -28,7 +41,7 @@ export default function DocumentsPage() {
     const loadData = async () => {
       const cached = getCached('documents')
       if (cached) {
-        setQuotes(cached.quotes || [])
+        setQuotes(processQuotes(cached.quotes || []))
         setClients(cached.clients || [])
         setLoading(false)
         return
@@ -39,16 +52,10 @@ export default function DocumentsPage() {
         supabase.from('quotes').select('*').eq('user_id', user.id).order('created_at', { ascending: false }),
         supabase.from('clients').select('id, name').eq('user_id', user.id),
       ])
-      const now = new Date().toISOString().split('T')[0]
-      const processed = (q || []).map((quote: any) => {
-        if (quote.type === 'invoice' && quote.status === 'unpaid' && quote.due_date && quote.due_date < now) {
-          return { ...quote, status: 'overdue' }
-        }
-        return quote
-      })
+      const processed = processQuotes(q || [])
       setQuotes(processed)
       if (c) setClients(c)
-      setCached('documents', { quotes: processed, clients: c })
+      setCached('documents', { quotes: q || [], clients: c })
       setLoading(false)
     }
     loadData()
@@ -60,7 +67,7 @@ export default function DocumentsPage() {
     const map: Record<string, string> = {
       paid: 'badge-paid', unpaid: 'badge-unpaid', overdue: 'badge-overdue',
       converted: 'badge-converted', sent: 'badge-sent', accepted: 'badge-accepted',
-      rejected: 'badge-rejected', draft: 'badge-draft',
+      rejected: 'badge-rejected', draft: 'badge-draft', expired: 'badge-overdue',
     }
     return map[status] || 'badge-draft'
   }
@@ -155,7 +162,9 @@ export default function DocumentsPage() {
         ) : filtered.length === 0 ? (
           <div className="q-empty">
             <div className="q-empty-title">No {activeTab} found</div>
-            <div className="q-empty-sub">{search ? 'Try a different search' : statusFilter !== 'all' ? 'Try a different filter' : `Tap + to create your first ${activeTab === 'quotes' ? 'quote' : 'invoice'}`}</div>
+            <div className="q-empty-sub">
+              {search ? 'Try a different search' : statusFilter !== 'all' ? 'Try a different filter' : `Tap + to create your first ${activeTab === 'quotes' ? 'quote' : 'invoice'}`}
+            </div>
           </div>
         ) : (
           filtered.map(quote => (
