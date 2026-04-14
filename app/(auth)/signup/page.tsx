@@ -6,92 +6,140 @@ import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 
 export default function SignupPage() {
+  const supabase = createClient()
+  const router = useRouter()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
-  const [confirm, setConfirm] = useState('')
-  const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
-  const router = useRouter()
-  const supabase = createClient()
+  const [error, setError] = useState('')
+  const [emailSent, setEmailSent] = useState(false)
 
   const handleSignup = async () => {
-    if (!email || !password || !confirm) { setError('Please fill in all fields'); return }
-    if (password !== confirm) { setError('Passwords do not match'); return }
+    if (!email || !password) { setError('Email and password are required'); return }
     if (password.length < 6) { setError('Password must be at least 6 characters'); return }
     setLoading(true)
     setError('')
-    const { error } = await supabase.auth.signUp({ email, password })
-    if (error) { setError(error.message); setLoading(false) }
-    else router.push('/onboarding')
+
+    const { error: signupError } = await supabase.auth.signUp({
+      email,
+      password,
+      options: {
+        emailRedirectTo: `${window.location.origin}/auth/callback`,
+      },
+    })
+
+    if (signupError) {
+      setError(signupError.message)
+      setLoading(false)
+      return
+    }
+
+    setEmailSent(true)
+    setLoading(false)
   }
 
-  const handleGoogle = async () => {
+  const handleGoogleSignup = async () => {
+    setLoading(true)
     await supabase.auth.signInWithOAuth({
       provider: 'google',
-      options: { redirectTo: `${window.location.origin}/auth/callback` }
+      options: {
+        redirectTo: `${window.location.origin}/auth/callback`,
+      },
     })
   }
 
   return (
-    <div className="q-page" style={{ justifyContent: 'center', minHeight: '100svh' }}>
-      <div style={{ padding: '0 24px', width: '100%', maxWidth: 440, margin: '0 auto' }}>
-        <div style={{ textAlign: 'center', marginBottom: 32 }}>
-          <div style={{ width: 64, height: 64, borderRadius: 20, background: 'linear-gradient(135deg, #6c47ff, #9b6bff)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px', boxShadow: '0 8px 24px rgba(108,71,255,0.3)' }}>
-            <svg width="32" height="32" viewBox="0 0 32 32" fill="none">
-              <path d="M8 10h16M8 16h12M8 22h8" stroke="#fff" strokeWidth="2.5" strokeLinecap="round"/>
-            </svg>
+    <div className="q-page" style={{ background: 'linear-gradient(160deg, #6c47ff 0%, #9b6bff 50%, var(--bg) 100%)' }}>
+      <div style={{ padding: '60px 24px 40px' }}>
+        <div style={{ fontSize: 32, fontWeight: 800, color: '#fff', marginBottom: 6 }}>Qouta</div>
+        <div style={{ fontSize: 15, color: 'rgba(255,255,255,0.75)' }}>Create your free account</div>
+      </div>
+
+      <div style={{ flex: 1, background: 'var(--bg)', borderRadius: '24px 24px 0 0', padding: '32px 20px 40px' }}>
+        {error && <div className="q-error">{error}</div>}
+
+        {emailSent && (
+          <div style={{ background: 'var(--green-bg)', border: '1px solid rgba(0,194,122,0.3)', borderRadius: 'var(--radius-sm)', padding: '16px 18px', marginBottom: 20 }}>
+            <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--green)', marginBottom: 4 }}>Confirmation email sent</div>
+            <div style={{ fontSize: 13, color: 'var(--text2)', lineHeight: 1.6 }}>
+              We sent a link to <strong>{email}</strong>. Click it to activate your account and get started.
+            </div>
+            <div style={{ fontSize: 12, color: 'var(--text3)', marginTop: 8 }}>
+              Did not receive it? Check spam or{' '}
+              <button
+                onClick={() => { setEmailSent(false); setError('') }}
+                style={{ background: 'none', border: 'none', color: 'var(--green)', fontWeight: 700, cursor: 'pointer', fontSize: 12, padding: 0 }}
+              >
+                try a different email
+              </button>
+            </div>
           </div>
-          <div style={{ fontSize: 28, fontWeight: 800, color: 'var(--text)', letterSpacing: -0.5 }}>Qouta</div>
-          <div style={{ fontSize: 14, color: 'var(--text3)', marginTop: 4 }}>Create your account</div>
-        </div>
+        )}
 
-        <div className="q-card" style={{ padding: 24 }}>
-          {error && <div className="q-error">{error}</div>}
+        {!emailSent && (
+          <>
+            <div className="q-form-group">
+              <label className="q-label">Email address</label>
+              <input
+                className="q-input"
+                type="email"
+                value={email}
+                onChange={e => setEmail(e.target.value)}
+                placeholder="you@example.com"
+                autoCapitalize="none"
+                autoCorrect="off"
+              />
+            </div>
 
-          <div className="q-form-group">
-            <label className="q-label">Email</label>
-            <input className="q-input" type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="you@example.com"/>
-          </div>
+            <div className="q-form-group">
+              <label className="q-label">Password</label>
+              <input
+                className="q-input"
+                type="password"
+                value={password}
+                onChange={e => setPassword(e.target.value)}
+                placeholder="At least 6 characters"
+                onKeyDown={e => e.key === 'Enter' && handleSignup()}
+              />
+            </div>
 
-          <div className="q-form-group">
-            <label className="q-label">Password</label>
-            <input className="q-input" type="password" value={password} onChange={e => setPassword(e.target.value)} placeholder="At least 6 characters"/>
-          </div>
+            <button
+              onClick={handleSignup}
+              disabled={loading || !email || !password}
+              className="q-btn-primary"
+              style={{ marginBottom: 12 }}
+            >
+              {loading ? 'Creating account...' : 'Create account'}
+            </button>
 
-          <div className="q-form-group">
-            <label className="q-label">Confirm password</label>
-            <input className="q-input" type="password" value={confirm} onChange={e => setConfirm(e.target.value)} placeholder="••••••••" onKeyDown={e => e.key === 'Enter' && handleSignup()}/>
-          </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12, margin: '16px 0' }}>
+              <div style={{ flex: 1, height: 1, background: 'var(--border)' }}/>
+              <div style={{ fontSize: 12, color: 'var(--text3)', fontWeight: 600 }}>OR</div>
+              <div style={{ flex: 1, height: 1, background: 'var(--border)' }}/>
+            </div>
 
-          <button
-            onClick={handleSignup}
-            disabled={loading || !email || !password || !confirm}
-            className="q-btn-primary"
-            style={{ marginBottom: 16 }}
-          >
-            {loading ? 'Creating account...' : 'Create account'}
-          </button>
+            <button
+              onClick={handleGoogleSignup}
+              disabled={loading}
+              className="q-btn-secondary"
+              style={{ marginBottom: 20 }}
+            >
+              <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+                <path d="M17.64 9.2c0-.637-.057-1.251-.164-1.84H9v3.481h4.844c-.209 1.125-.843 2.078-1.796 2.716v2.259h2.908c1.702-1.567 2.684-3.875 2.684-6.615z" fill="#4285F4"/>
+                <path d="M9 18c2.43 0 4.467-.806 5.956-2.184l-2.908-2.259c-.806.54-1.837.86-3.048.86-2.344 0-4.328-1.584-5.036-3.711H.957v2.332A8.997 8.997 0 009 18z" fill="#34A853"/>
+                <path d="M3.964 10.706A5.41 5.41 0 013.682 9c0-.593.102-1.17.282-1.706V4.962H.957A8.996 8.996 0 000 9c0 1.452.348 2.827.957 4.038l3.007-2.332z" fill="#FBBC05"/>
+                <path d="M9 3.58c1.321 0 2.508.454 3.44 1.345l2.582-2.58C13.463.891 11.426 0 9 0A8.997 8.997 0 00.957 4.962L3.964 7.294C4.672 5.163 6.656 3.58 9 3.58z" fill="#EA4335"/>
+              </svg>
+              Continue with Google
+            </button>
+          </>
+        )}
 
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
-            <div style={{ flex: 1, height: 1, background: 'var(--border)' }}/>
-            <span style={{ fontSize: 12, color: 'var(--text3)' }}>or</span>
-            <div style={{ flex: 1, height: 1, background: 'var(--border)' }}/>
-          </div>
-
-          <button onClick={handleGoogle} className="q-btn-secondary" style={{ marginBottom: 20 }}>
-            <svg width="18" height="18" viewBox="0 0 18 18">
-              <path fill="#4285F4" d="M16.51 8H8.98v3h4.3c-.18 1-.74 1.48-1.6 2.04v2.01h2.6a7.8 7.8 0 002.38-5.88c0-.57-.05-.66-.15-1.18z"/>
-              <path fill="#34A853" d="M8.98 17c2.16 0 3.97-.72 5.3-1.94l-2.6-2a4.8 4.8 0 01-7.18-2.54H1.83v2.07A8 8 0 008.98 17z"/>
-              <path fill="#FBBC05" d="M4.5 10.52a4.8 4.8 0 010-3.04V5.41H1.83a8 8 0 000 7.18l2.67-2.07z"/>
-              <path fill="#EA4335" d="M8.98 4.18c1.17 0 2.23.4 3.06 1.2l2.3-2.3A8 8 0 001.83 5.4L4.5 7.49a4.77 4.77 0 014.48-3.31z"/>
-            </svg>
-            Continue with Google
-          </button>
-
-          <div style={{ textAlign: 'center', fontSize: 14, color: 'var(--text3)' }}>
-            Already have an account?{' '}
-            <Link href="/login" style={{ color: 'var(--purple)', fontWeight: 700, textDecoration: 'none' }}>Sign in</Link>
-          </div>
+        <div style={{ textAlign: 'center', fontSize: 14, color: 'var(--text3)' }}>
+          Already have an account?{' '}
+          <Link href="/login" style={{ color: 'var(--purple)', fontWeight: 700, textDecoration: 'none' }}>
+            Sign in
+          </Link>
         </div>
       </div>
     </div>

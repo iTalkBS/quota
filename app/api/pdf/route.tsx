@@ -206,13 +206,6 @@ export async function GET(request: NextRequest) {
             )}
           </View>
 
-          {quote.notes && (
-            <View style={styles.notes}>
-              <Text style={styles.notesLabel}>Notes</Text>
-              <Text style={styles.notesText}>{quote.notes}</Text>
-            </View>
-          )}
-
           {isInvoice && payments && payments.length > 0 && (
             <View style={styles.paymentHistorySection}>
               <Text style={[styles.termsTitle, { marginBottom: 6 }]}>Payment history</Text>

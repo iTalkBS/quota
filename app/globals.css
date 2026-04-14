@@ -359,9 +359,9 @@ html, body {
 }
 
 .q-doc-card:active {
-  transform: scale(0.99);
+  transform: scale(0.98);
+  background: var(--purple-bg);
 }
-
 .q-client-card {
   background: var(--white);
   border: 1px solid var(--border);
@@ -378,9 +378,9 @@ html, body {
 }
 
 .q-client-card:active {
-  transform: scale(0.99);
+  transform: scale(0.98);
+  background: var(--purple-bg);
 }
-
 .q-avatar {
   width: 42px;
   height: 42px;
@@ -771,6 +771,19 @@ html, body {
 
 .q-suggestion-item:active {
   background: var(--purple-bg);
+}
+
+.q-item-card:active {
+  transform: scale(0.98);
+  background: var(--purple-bg);
+}
+
+.q-btn-primary:active:not(:disabled),
+.q-btn-secondary:active,
+.q-btn-green:active,
+.q-btn-danger:active {
+  transform: scale(0.97);
+  opacity: 0.9;
 }
 
 @keyframes shimmer {

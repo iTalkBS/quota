@@ -136,7 +136,37 @@ export default function SettingsPage() {
     setExpandedSection(prev => prev === s ? null : s)
   }, [])
 
-  if (fetching) return <div className="q-page"><div className="q-loading">Loading...</div></div>
+  if (fetching) return (
+    <div className="q-page">
+      <div className="q-topbar">
+        <div style={{ width: 34 }}/>
+        <div className="q-topbar-title">Settings</div>
+        <div style={{ width: 34 }}/>
+      </div>
+      <div className="q-scroll">
+        <div className="q-skeleton-card" style={{ padding: 18, marginBottom: 14, borderRadius: 'var(--radius-sm)' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+            <div className="q-skeleton" style={{ width: 50, height: 50, borderRadius: '50%' }}/>
+            <div>
+              <div className="q-skeleton" style={{ width: 140, height: 16, marginBottom: 8 }}/>
+              <div className="q-skeleton" style={{ width: 100, height: 12 }}/>
+            </div>
+          </div>
+        </div>
+        {[1,2,3,4].map(i => (
+          <div key={i} className="q-skeleton-card" style={{ marginBottom: 10 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+              <div className="q-skeleton" style={{ width: 32, height: 32, borderRadius: 8 }}/>
+              <div>
+                <div className="q-skeleton" style={{ width: 120, height: 14, marginBottom: 6 }}/>
+                <div className="q-skeleton" style={{ width: 80, height: 11 }}/>
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
 
   return (
     <div className="q-page">
