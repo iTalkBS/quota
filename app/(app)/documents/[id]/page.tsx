@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react'
 import { createClient } from '@/lib/supabase'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
+import { clearCache } from '@/lib/cache'
 
 export default function QuoteDetailPage({ params }: { params: { id: string } }) {
   const router = useRouter()
@@ -89,11 +90,55 @@ export default function QuoteDetailPage({ params }: { params: { id: string } }) 
 
   const handleWhatsApp = () => {
     if (!client?.phone) return
-    const phone = client.phone.replace(/\D/g, '')
+    const rawPhone = client.phone.trim()
+    const phone = rawPhone.startsWith('+')
+      ? rawPhone.replace(/[^\d]/g, '')
+      : rawPhone.replace(/[^\d]/g, '')
     const message = encodeURIComponent(
       `Hello ${client.name},\n\nPlease find attached your ${quote.type === 'quote' ? 'quotation' : 'invoice'} ${quote.quote_number} from ${profile?.business_name}.\n\nTotal: ${quote.currency_symbol} ${Number(quote.total).toLocaleString()}${balance > 0 && quote.type === 'invoice' ? `\nBalance due: ${quote.currency_symbol} ${balance.toLocaleString()}` : ''}\n\nThank you for your business.`
     )
     window.open(`https://wa.me/${phone}?text=${message}`, '_blank')
+  }
+
+const handleUpdateStatus = async (newStatus: string) => {
+    await supabase.from('quotes').update({ status: newStatus }).eq('id', params.id)
+    setQuote({ ...quote, status: newStatus })
+    clearCache('dashboard')
+    clearCache('documents')
+  }
+
+  const handleDuplicate = async () => {
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) return
+    const { data: numberData } = await supabase
+      .rpc('get_next_quote_number', { uid: user.id, doc_type: quote.type })
+    const newNumber = numberData || `${quote.type === 'invoice' ? 'INV' : 'QUO'}-${new Date().getFullYear()}-${Date.now()}`
+    const { data: newDoc } = await supabase.from('quotes').insert({
+      user_id: user.id,
+      client_id: quote.client_id,
+      quote_number: newNumber,
+      type: quote.type,
+      status: 'draft',
+      currency_code: quote.currency_code,
+      currency_symbol: quote.currency_symbol,
+      vat_rate: quote.vat_rate,
+      subtotal: quote.subtotal,
+      vat_amount: quote.vat_amount,
+      total: quote.total,
+      notes: quote.notes,
+      issue_date: new Date().toISOString().split('T')[0],
+      expiry_date: quote.expiry_date,
+      due_date: quote.due_date,
+      amount_paid: 0,
+    }).select().single()
+    if (newDoc) {
+      await supabase.from('quote_items').insert(
+        items.map(item => ({ ...item, id: undefined, quote_id: newDoc.id }))
+      )
+      clearCache('dashboard')
+      clearCache('documents')
+      router.push(`/documents/${newDoc.id}`)
+    }
   }
 
   const handleConvertToInvoice = async () => {
@@ -370,6 +415,34 @@ export default function QuoteDetailPage({ params }: { params: { id: string } }) 
             color="var(--orange)"
           />
         )}
+
+        {!isInvoice && quote.status === 'sent' && (
+          <ActionBtn
+            onClick={() => handleUpdateStatus('accepted')}
+            icon={<svg width="20" height="20" viewBox="0 0 20 20" fill="none"><path d="M4 10l4 4 8-8" stroke="#00c27a" strokeWidth="1.5" strokeLinecap="round"/></svg>}
+            label="Accept"
+            bg="var(--green-bg)"
+            color="var(--green)"
+          />
+        )}
+
+        {!isInvoice && quote.status === 'sent' && (
+          <ActionBtn
+            onClick={() => handleUpdateStatus('rejected')}
+            icon={<svg width="20" height="20" viewBox="0 0 20 20" fill="none"><path d="M5 5l10 10M15 5L5 15" stroke="#ff4060" strokeWidth="1.5" strokeLinecap="round"/></svg>}
+            label="Reject"
+            bg="var(--red-bg)"
+            color="var(--red)"
+          />
+        )}
+
+        <ActionBtn
+          onClick={handleDuplicate}
+          icon={<svg width="20" height="20" viewBox="0 0 20 20" fill="none"><rect x="7" y="7" width="10" height="10" rx="2" stroke="#6c47ff" strokeWidth="1.5"/><path d="M13 7V5a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2" stroke="#6c47ff" strokeWidth="1.5" strokeLinecap="round"/></svg>}
+          label="Copy"
+          bg="var(--purple-bg)"
+          color="var(--purple)"
+        />
       </div>
 
       <nav className="q-bottomnav">

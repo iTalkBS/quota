@@ -3,6 +3,7 @@
 import Link from 'next/link'
 import { useState, useEffect } from 'react'
 import { createClient } from '@/lib/supabase'
+import { getCached, setCached } from '@/lib/cache'
 
 export default function DashboardPage() {
   const [quotes, setQuotes] = useState<any[]>([])
@@ -13,6 +14,14 @@ export default function DashboardPage() {
 
   useEffect(() => {
     const loadData = async () => {
+      const cached = getCached('dashboard')
+      if (cached) {
+        setQuotes(cached.quotes || [])
+        setClients(cached.clients || [])
+        setProfile(cached.profile)
+        setLoading(false)
+        return
+      }
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) return
       const [{ data: q }, { data: c }, { data: p }] = await Promise.all([
@@ -23,6 +32,7 @@ export default function DashboardPage() {
       if (q) setQuotes(q)
       if (c) setClients(c)
       if (p) setProfile(p)
+      setCached('dashboard', { quotes: q || [], clients: c || [], profile: p })
       setLoading(false)
     }
     loadData()
@@ -40,10 +50,13 @@ export default function DashboardPage() {
   }
 
   const totalQuotes = quotes.filter(q => q.type === 'quote').length
-  const unpaidInvoices = quotes.filter(q => q.type === 'invoice' && q.status === 'unpaid')
+  const unpaidInvoices = quotes.filter(q => q.type === 'invoice' && (q.status === 'unpaid' || q.status === 'overdue'))
   const unpaidTotal = unpaidInvoices.reduce((sum, q) => sum + Number(q.total), 0)
-  const unpaidSymbol = unpaidInvoices[0]?.currency_symbol || ''
+  const unpaidSymbol = unpaidInvoices[0]?.currency_symbol || profile?.currency_symbol || ''
+  const paidInvoices = quotes.filter(q => q.type === 'invoice' && q.status === 'paid')
+  const totalRevenue = paidInvoices.reduce((sum, q) => sum + Number(q.total), 0)
   const recent = quotes.slice(0, 5)
+  const isNewUser = !loading && profile !== null && !profile?.business_name
 
   return (
     <div className="q-page">
@@ -62,61 +75,86 @@ export default function DashboardPage() {
       </div>
 
       <div className="q-scroll" style={{ paddingTop: 24 }}>
-        <div className="q-stat-grid">
-          <div className="q-stat">
-            <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 6 }}>Total quotes</div>
-            <div style={{ fontSize: 28, fontWeight: 800, color: 'var(--text)', letterSpacing: -0.5 }}>{totalQuotes}</div>
-            <div style={{ fontSize: 11, color: 'var(--purple)', fontWeight: 600, marginTop: 3 }}>all time</div>
-          </div>
-          <div className="q-stat">
-            <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 6 }}>Unpaid</div>
-            <div style={{ fontSize: 28, fontWeight: 800, color: 'var(--text)', letterSpacing: -0.5 }}>{unpaidInvoices.length}</div>
-            {unpaidInvoices.length > 0 && (
-              <div style={{ fontSize: 11, color: 'var(--orange)', fontWeight: 600, marginTop: 3 }}>
-                {unpaidSymbol} {unpaidTotal.toLocaleString()}
-              </div>
-            )}
-          </div>
-        </div>
-
-        <Link href="/documents/new" className="q-btn-primary" style={{ marginBottom: 20, textDecoration: 'none' }}>
-          <svg width="18" height="18" viewBox="0 0 18 18" fill="none"><path d="M9 3v12M3 9h12" stroke="#fff" stroke-width="2.5" stroke-linecap="round"/></svg>
-          New Quote
-        </Link>
-
         {loading ? (
           <div className="q-loading">Loading...</div>
+        ) : isNewUser ? (
+          <div>
+            <div style={{ background: 'var(--white)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', padding: 24, marginBottom: 16, textAlign: 'center' }}>
+              <div style={{ fontSize: 40, marginBottom: 12 }}>👋</div>
+              <div style={{ fontSize: 18, fontWeight: 800, color: 'var(--text)', marginBottom: 8 }}>Welcome to Qouta</div>
+              <div style={{ fontSize: 14, color: 'var(--text3)', marginBottom: 20, lineHeight: 1.6 }}>
+                Create your first quote in seconds. Add your client, list your items, and share a professional PDF via WhatsApp.
+              </div>
+              <Link href="/documents/new" className="q-btn-primary" style={{ textDecoration: 'none', display: 'inline-flex' }}>
+                <svg width="18" height="18" viewBox="0 0 18 18" fill="none"><path d="M9 3v12M3 9h12" stroke="#fff" strokeWidth="2.5" strokeLinecap="round"/></svg>
+                Create your first quote
+              </Link>
+            </div>
+            <div style={{ background: 'var(--purple-bg)', border: '1px solid rgba(108,71,255,0.2)', borderRadius: 'var(--radius-sm)', padding: 16, marginBottom: 16 }}>
+              <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--purple)', marginBottom: 8 }}>Getting started checklist</div>
+              <div style={{ fontSize: 13, color: 'var(--text2)', lineHeight: 2 }}>
+                <div>① Go to Settings → fill in your business profile</div>
+                <div>② Add your banking details for PDF invoices</div>
+                <div>③ Add items to your directory for quick quoting</div>
+                <div>④ Create your first quote and share via WhatsApp</div>
+              </div>
+            </div>
+          </div>
         ) : (
           <>
+            <div className="q-stat-grid">
+              <div className="q-stat">
+                <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 6 }}>Total quotes</div>
+                <div style={{ fontSize: 28, fontWeight: 800, color: 'var(--text)', letterSpacing: -0.5 }}>{totalQuotes}</div>
+                <div style={{ fontSize: 11, color: 'var(--purple)', fontWeight: 600, marginTop: 3 }}>all time</div>
+              </div>
+              <div className="q-stat">
+                <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 6 }}>Unpaid</div>
+                <div style={{ fontSize: 28, fontWeight: 800, color: 'var(--text)', letterSpacing: -0.5 }}>{unpaidInvoices.length}</div>
+                {unpaidInvoices.length > 0 && (
+                  <div style={{ fontSize: 11, color: 'var(--orange)', fontWeight: 600, marginTop: 3 }}>
+                    {unpaidSymbol} {unpaidTotal.toLocaleString()}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {totalRevenue > 0 && (
+              <div style={{ background: 'var(--green-bg)', border: '1px solid rgba(0,194,122,0.2)', borderRadius: 'var(--radius-sm)', padding: '12px 16px', marginBottom: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--green)' }}>Total revenue collected</div>
+                <div style={{ fontSize: 16, fontWeight: 800, color: 'var(--green)' }}>
+                  {paidInvoices[0]?.currency_symbol} {totalRevenue.toLocaleString()}
+                </div>
+              </div>
+            )}
+
+            <Link href="/documents/new" className="q-btn-primary" style={{ marginBottom: 20, textDecoration: 'none' }}>
+              <svg width="18" height="18" viewBox="0 0 18 18" fill="none"><path d="M9 3v12M3 9h12" stroke="#fff" strokeWidth="2.5" strokeLinecap="round"/></svg>
+              New Quote
+            </Link>
+
             <div className="q-section-header">
               <div className="q-section-title">Recent documents</div>
               <Link href="/documents" className="q-section-link">See all</Link>
             </div>
 
-            {recent.length === 0 ? (
-              <div className="q-empty">
-                <div className="q-empty-title">No documents yet</div>
-                <div className="q-empty-sub">Create your first quote to get started</div>
-              </div>
-            ) : (
-              recent.map(quote => (
-                <Link key={quote.id} href={`/documents/${quote.id}`} className="q-doc-card">
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 }}>
-                    <div>
-                      <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--text)' }}>{getClientName(quote.client_id)}</div>
-                      <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 2 }}>{quote.quote_number}</div>
-                    </div>
-                    <span className={`q-badge ${getStatusStyle(quote.status)}`}>{quote.status.toUpperCase()}</span>
+            {recent.map(quote => (
+              <Link key={quote.id} href={`/documents/${quote.id}`} className="q-doc-card">
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 }}>
+                  <div>
+                    <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--text)' }}>{getClientName(quote.client_id)}</div>
+                    <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 2 }}>{quote.quote_number}</div>
                   </div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <div style={{ fontSize: 11, color: 'var(--text3)' }}>{quote.issue_date}</div>
-                    <div style={{ fontSize: 15, fontWeight: 800, color: 'var(--text)' }}>
-                      {quote.currency_symbol} {Number(quote.total).toLocaleString()}
-                    </div>
+                  <span className={`q-badge ${getStatusStyle(quote.status)}`}>{quote.status.toUpperCase()}</span>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <div style={{ fontSize: 11, color: 'var(--text3)' }}>{quote.issue_date}</div>
+                  <div style={{ fontSize: 15, fontWeight: 800, color: 'var(--text)' }}>
+                    {quote.currency_symbol} {Number(quote.total).toLocaleString()}
                   </div>
-                </Link>
-              ))
-            )}
+                </div>
+              </Link>
+            ))}
           </>
         )}
       </div>
