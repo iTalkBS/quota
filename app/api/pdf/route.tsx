@@ -77,13 +77,13 @@ export async function GET(request: NextRequest) {
     if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
     const [{ data: quote }, { data: profile }, { data: items }, { data: payments }] = await Promise.all([
-      supabase.from('quotes').select('*').eq('id', quoteId).single(),
+      supabase.from('quotes').select('*').eq('id', quoteId).eq('user_id', user.id).single(),
       supabase.from('profiles').select('*').eq('id', user.id).single(),
       supabase.from('quote_items').select('*').eq('quote_id', quoteId),
       supabase.from('payments').select('*').eq('quote_id', quoteId).order('payment_date'),
     ])
 
-    if (!quote) return NextResponse.json({ error: 'Quote not found' }, { status: 404 })
+    if (!quote) return NextResponse.json({ error: 'Quote not found or access denied' }, { status: 404 })
 
     let client = null
     if (quote.client_id) {

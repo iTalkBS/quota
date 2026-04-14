@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { createClient } from '@/lib/supabase'
+import { clearCache } from '@/lib/cache'
 import { useRouter } from 'next/navigation'
 
 export default function NewClientPage() {
@@ -25,8 +26,12 @@ export default function NewClientPage() {
     const { error: saveError } = await supabase
       .from('clients')
       .insert({ name, phone, email, address, user_id: user.id })
-    if (saveError) { setError(saveError.message); setLoading(false) }
-    else router.push('/clients')
+   if (saveError) { setError(saveError.message); setLoading(false) }
+    else {
+      clearCache('clients')
+      clearCache('dashboard')
+      router.push('/clients')
+    }
   }
 
   return (

@@ -3,6 +3,7 @@
 import Link from 'next/link'
 import { useState, useEffect } from 'react'
 import { createClient } from '@/lib/supabase'
+import { getCached, setCached } from '@/lib/cache'
 
 const AVATAR_COLORS = [
   { bg: 'var(--purple-bg)', color: 'var(--purple)' },
@@ -19,6 +20,12 @@ export default function ClientsPage() {
 
   useEffect(() => {
     const loadClients = async () => {
+      const cached = getCached('clients')
+      if (cached) {
+        setClients(cached)
+        setLoading(false)
+        return
+      }
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) return
       const { data } = await supabase
@@ -27,6 +34,7 @@ export default function ClientsPage() {
         .eq('user_id', user.id)
         .order('name')
       if (data) setClients(data)
+      setCached('clients', data)
       setLoading(false)
     }
     loadClients()

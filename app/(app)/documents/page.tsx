@@ -3,6 +3,7 @@
 import Link from 'next/link'
 import { useState, useEffect } from 'react'
 import { createClient } from '@/lib/supabase'
+import { getCached, setCached } from '@/lib/cache'
 
 export default function DocumentsPage() {
   const [activeTab, setActiveTab] = useState<'quotes' | 'invoices'>('quotes')
@@ -14,6 +15,13 @@ export default function DocumentsPage() {
 
   useEffect(() => {
     const loadData = async () => {
+      const cached = getCached('documents')
+      if (cached) {
+        setQuotes(cached.quotes)
+        setClients(cached.clients)
+        setLoading(false)
+        return
+      }
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) return
       const [{ data: q }, { data: c }] = await Promise.all([
@@ -22,6 +30,7 @@ export default function DocumentsPage() {
       ])
       if (q) setQuotes(q)
       if (c) setClients(c)
+      setCached('documents', { quotes: q, clients: c })
       setLoading(false)
     }
     loadData()

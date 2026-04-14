@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react'
 import { createClient } from '@/lib/supabase'
 import { useRouter } from 'next/navigation'
 import { countries } from '@/lib/countries'
+import { clearCache } from '@/lib/cache'
 
 type Client = { id: string; name: string; email: string; phone: string; address: string }
 type Item = { name: string; description: string; item_type: 'product' | 'service'; quantity: string; unit_price: string; line_total: number }
@@ -78,12 +79,12 @@ export default function NewQuotePage() {
   const searchItems = async (query: string, index: number) => {
     setActiveItemIndex(index)
     if (!query) { setItemSuggestions([]); return }
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) return
+    const uid = profile ? (await supabase.auth.getUser()).data.user?.id : null
+    if (!uid) return
     const { data } = await supabase
       .from('items_directory')
       .select('*')
-      .eq('user_id', user.id)
+      .eq('user_id', uid)
       .ilike('name', `%${query}%`)
       .limit(10)
     setItemSuggestions(data || [])
@@ -133,13 +134,10 @@ export default function NewQuotePage() {
       if (saved) clientId = saved.id
     }
 
-    const { count } = await supabase
-      .from('quotes')
-      .select('*', { count: 'exact', head: true })
-      .eq('user_id', user.id)
-      .eq('type', 'quote')
+    const { data: numberData } = await supabase
+      .rpc('get_next_quote_number', { uid: user.id, doc_type: 'quote' })
 
-    const quoteNumber = `QUO-${new Date().getFullYear()}-${String((count || 0) + 1).padStart(4, '0')}`
+    const quoteNumber = numberData || `QUO-${new Date().getFullYear()}-${Date.now()}`
 
     const { data: quote, error: qe } = await supabase
       .from('quotes')
@@ -188,6 +186,8 @@ export default function NewQuotePage() {
       )
     ])
 
+    clearCache('dashboard')
+    clearCache('documents')
     router.push(`/documents/${quote.id}`)
   }
 

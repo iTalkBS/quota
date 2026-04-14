@@ -99,8 +99,9 @@ export default function QuoteDetailPage({ params }: { params: { id: string } }) 
   const handleConvertToInvoice = async () => {
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return
-    const { count } = await supabase.from('quotes').select('*', { count: 'exact', head: true }).eq('user_id', user.id).eq('type', 'invoice')
-    const invoiceNumber = `INV-${new Date().getFullYear()}-${String((count || 0) + 1).padStart(4, '0')}`
+    const { data: numberData } = await supabase
+      .rpc('get_next_quote_number', { uid: user.id, doc_type: 'invoice' })
+    const invoiceNumber = numberData || `INV-${new Date().getFullYear()}-${Date.now()}`
     const dueDate = new Date()
     dueDate.setDate(dueDate.getDate() + 30)
     const { data: invoice } = await supabase.from('quotes').insert({

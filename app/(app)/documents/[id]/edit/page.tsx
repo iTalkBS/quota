@@ -15,13 +15,11 @@ export default function EditDocumentPage({ params }: { params: { id: string } })
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
   const [docType, setDocType] = useState('quote')
-
   const [clients, setClients] = useState<Client[]>([])
   const [clientSearch, setClientSearch] = useState('')
   const [selectedClient, setSelectedClient] = useState<Client | null>(null)
   const [isNewClient, setIsNewClient] = useState(false)
   const [newClient, setNewClient] = useState({ name: '', email: '', phone: '', address: '' })
-
   const [items, setItems] = useState<Item[]>([])
   const [currencyCode, setCurrencyCode] = useState('USD')
   const [currencySymbol, setCurrencySymbol] = useState('$')
@@ -33,14 +31,16 @@ export default function EditDocumentPage({ params }: { params: { id: string } })
   const [dueDate, setDueDate] = useState('')
   const [itemSuggestions, setItemSuggestions] = useState<any[]>([])
   const [activeItemIndex, setActiveItemIndex] = useState<number | null>(null)
+  const [userId, setUserId] = useState<string | null>(null)
 
   useEffect(() => {
     const load = async () => {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) return
+      setUserId(user.id)
 
       const [{ data: q }, { data: i }, { data: c }] = await Promise.all([
-        supabase.from('quotes').select('*').eq('id', params.id).single(),
+        supabase.from('quotes').select('*').eq('id', params.id).eq('user_id', user.id).single(),
         supabase.from('quote_items').select('*').eq('quote_id', params.id),
         supabase.from('clients').select('*').eq('user_id', user.id).order('name'),
       ])
@@ -55,7 +55,6 @@ export default function EditDocumentPage({ params }: { params: { id: string } })
         setIssueDate(q.issue_date || '')
         setExpiryDate(q.expiry_date || '')
         setDueDate(q.due_date || '')
-
         if (q.client_id && c) {
           const existing = c.find((cl: Client) => cl.id === q.client_id)
           if (existing) {
@@ -107,9 +106,13 @@ export default function EditDocumentPage({ params }: { params: { id: string } })
   const searchItems = async (query: string, index: number) => {
     setActiveItemIndex(index)
     if (!query) { setItemSuggestions([]); return }
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) return
-    const { data } = await supabase.from('items_directory').select('*').eq('user_id', user.id).ilike('name', `%${query}%`).limit(5)
+    if (!userId) return
+    const { data } = await supabase
+      .from('items_directory')
+      .select('*')
+      .eq('user_id', userId)
+      .ilike('name', `%${query}%`)
+      .limit(10)
     setItemSuggestions(data || [])
   }
 
@@ -130,20 +133,29 @@ export default function EditDocumentPage({ params }: { params: { id: string } })
 
   const handleCurrencyChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const selected = countries.find(c => c.currency_code === e.target.value)
-    if (selected) { setCurrencyCode(selected.currency_code); setCurrencySymbol(selected.currency_symbol) }
+    if (selected) {
+      setCurrencyCode(selected.currency_code)
+      setCurrencySymbol(selected.currency_symbol)
+    }
   }
 
   const handleSave = async () => {
     setSaving(true)
     setError('')
-
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) return
+    if (!userId) return
 
     let clientId = selectedClient?.id
     if (isNewClient) {
-      if (!newClient.name || !newClient.phone) { setError('Client name and phone are required'); setSaving(false); return }
-      const { data: saved } = await supabase.from('clients').insert({ ...newClient, user_id: user.id }).select().single()
+      if (!newClient.name || !newClient.phone) {
+        setError('Client name and phone are required')
+        setSaving(false)
+        return
+      }
+      const { data: saved } = await supabase
+        .from('clients')
+        .insert({ ...newClient, user_id: userId })
+        .select()
+        .single()
       if (saved) clientId = saved.id
     }
 
@@ -178,7 +190,6 @@ export default function EditDocumentPage({ params }: { params: { id: string } })
       )
     }
 
-    setSaving(false)
     router.push(`/documents/${params.id}`)
   }
 
@@ -213,7 +224,9 @@ export default function EditDocumentPage({ params }: { params: { id: string } })
                   <path d="M11 11l3 3" stroke="#a8a5c0" strokeWidth="1.5" strokeLinecap="round"/>
                 </svg>
                 <input value={clientSearch} onChange={e => setClientSearch(e.target.value)} placeholder="Search clients..."/>
-                {clientSearch && <button onClick={() => { setClientSearch(''); setSelectedClient(null) }} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text3)', fontSize: 18, lineHeight: 1, padding: 0 }}>×</button>}
+                {clientSearch && (
+                  <button onClick={() => { setClientSearch(''); setSelectedClient(null) }} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text3)', fontSize: 18, lineHeight: 1, padding: 0 }}>×</button>
+                )}
               </div>
 
               {clientSearch && filteredClients.length > 0 && !selectedClient && (
@@ -235,7 +248,8 @@ export default function EditDocumentPage({ params }: { params: { id: string } })
                       <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--green)' }}>{selectedClient.name}</div>
                       <div style={{ fontSize: 12, color: 'var(--green)', opacity: 0.8, marginTop: 2 }}>{selectedClient.phone}</div>
                     </div>
-                    <button onClick={() => { setSelectedClient(null); setClientSearch('') }} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--green)', fontSize: 18, lineHeight: 1, padding: 0 }}>×</button>
+                    <button onClick={() => { setSelectedClient(null); setClientSearch('') }}
+                      style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--green)', fontSize: 18, lineHeight: 1, padding: 0 }}>×</button>
                   </div>
                 </div>
               )}
@@ -296,17 +310,21 @@ export default function EditDocumentPage({ params }: { params: { id: string } })
 
         <div className="q-card" style={{ padding: 20, marginBottom: 12 }}>
           <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--purple)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 14 }}>Currency and VAT</div>
-          <div style={{ display: 'flex', gap: 10, marginBottom: 0 }}>
+          <div style={{ display: 'flex', gap: 10 }}>
             <div style={{ flex: 1 }}>
               <label className="q-label">Currency</label>
               <select className="q-select" value={currencyCode} onChange={handleCurrencyChange}>
-                {uniqueCurrencies.map(c => <option key={c.currency_code} value={c.currency_code}>{c.currency_code} ({c.currency_symbol})</option>)}
+                {uniqueCurrencies.map(c => (
+                  <option key={c.currency_code} value={c.currency_code}>{c.currency_code} ({c.currency_symbol})</option>
+                ))}
               </select>
             </div>
             <div style={{ flex: 1 }}>
               <label className="q-label">VAT</label>
-              <button onClick={() => setVatEnabled(!vatEnabled)}
-                style={{ width: '100%', padding: '13px 14px', borderRadius: 'var(--radius-xs)', border: '1.5px solid', fontSize: 14, fontWeight: 600, cursor: 'pointer', background: vatEnabled ? 'var(--purple-bg)' : 'var(--bg)', borderColor: vatEnabled ? 'var(--purple)' : 'var(--border2)', color: vatEnabled ? 'var(--purple)' : 'var(--text3)' }}>
+              <button
+                onClick={() => setVatEnabled(!vatEnabled)}
+                style={{ width: '100%', padding: '13px 14px', borderRadius: 'var(--radius-xs)', border: '1.5px solid', fontSize: 14, fontWeight: 600, cursor: 'pointer', background: vatEnabled ? 'var(--purple-bg)' : 'var(--bg)', borderColor: vatEnabled ? 'var(--purple)' : 'var(--border2)', color: vatEnabled ? 'var(--purple)' : 'var(--text3)' }}
+              >
                 {vatEnabled ? `VAT ${vatRate}%` : 'VAT off'}
               </button>
             </div>
@@ -321,17 +339,22 @@ export default function EditDocumentPage({ params }: { params: { id: string } })
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
                 <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Item {index + 1}</div>
                 {items.length > 1 && (
-                  <button onClick={() => setItems(items.filter((_, i) => i !== index))}
-                    style={{ background: 'var(--red-bg)', border: 'none', cursor: 'pointer', color: 'var(--red)', fontSize: 12, fontWeight: 600, padding: '4px 10px', borderRadius: 6 }}>
+                  <button
+                    onClick={() => setItems(items.filter((_, i) => i !== index))}
+                    style={{ background: 'var(--red-bg)', border: 'none', cursor: 'pointer', color: 'var(--red)', fontSize: 12, fontWeight: 600, padding: '4px 10px', borderRadius: 6 }}
+                  >
                     Remove
                   </button>
                 )}
               </div>
 
               <div style={{ position: 'relative', marginBottom: 10 }}>
-                <input className="q-input" value={item.name}
+                <input
+                  className="q-input"
+                  value={item.name}
                   onChange={e => { updateItem(index, 'name', e.target.value); searchItems(e.target.value, index) }}
-                  placeholder="Item name"/>
+                  placeholder="Item name"
+                />
                 {activeItemIndex === index && itemSuggestions.length > 0 && (
                   <div className="q-suggestion-list">
                     {itemSuggestions.map((s, i) => (
@@ -344,11 +367,20 @@ export default function EditDocumentPage({ params }: { params: { id: string } })
                 )}
               </div>
 
-              <input className="q-input" style={{ marginBottom: 10 }} value={item.description}
-                onChange={e => updateItem(index, 'description', e.target.value)} placeholder="Description (optional)"/>
+              <input
+                className="q-input"
+                style={{ marginBottom: 10 }}
+                value={item.description}
+                onChange={e => updateItem(index, 'description', e.target.value)}
+                placeholder="Description (optional)"
+              />
 
-              <select className="q-select" style={{ marginBottom: 10 }} value={item.item_type}
-                onChange={e => updateItem(index, 'item_type', e.target.value)}>
+              <select
+                className="q-select"
+                style={{ marginBottom: 10 }}
+                value={item.item_type}
+                onChange={e => updateItem(index, 'item_type', e.target.value)}
+              >
                 <option value="product">Product</option>
                 <option value="service">Service</option>
               </select>
@@ -356,15 +388,27 @@ export default function EditDocumentPage({ params }: { params: { id: string } })
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 8 }}>
                 <div>
                   <label className="q-label">Quantity</label>
-                  <input className="q-input" type="number" value={item.quantity}
+                  <input
+                    className="q-input"
+                    type="number"
+                    value={item.quantity}
                     onChange={e => updateItem(index, 'quantity', e.target.value)}
-                    onFocus={e => e.target.select()} placeholder="1" min="0"/>
+                    onFocus={e => e.target.select()}
+                    placeholder="1"
+                    min="0"
+                  />
                 </div>
                 <div>
                   <label className="q-label">Unit price</label>
-                  <input className="q-input" type="number" value={item.unit_price}
+                  <input
+                    className="q-input"
+                    type="number"
+                    value={item.unit_price}
                     onChange={e => updateItem(index, 'unit_price', e.target.value)}
-                    onFocus={e => e.target.select()} placeholder="0.00" min="0"/>
+                    onFocus={e => e.target.select()}
+                    placeholder="0.00"
+                    min="0"
+                  />
                 </div>
               </div>
 
@@ -376,7 +420,8 @@ export default function EditDocumentPage({ params }: { params: { id: string } })
 
           <button
             onClick={() => setItems([...items, { name: '', description: '', item_type: 'product', quantity: '1', unit_price: '', line_total: 0 }])}
-            style={{ width: '100%', background: 'none', border: '2px dashed var(--border2)', borderRadius: 'var(--radius-sm)', padding: 14, fontSize: 14, fontWeight: 600, color: 'var(--purple)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+            style={{ width: '100%', background: 'none', border: '2px dashed var(--border2)', borderRadius: 'var(--radius-sm)', padding: 14, fontSize: 14, fontWeight: 600, color: 'var(--purple)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}
+          >
             <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M8 2v12M2 8h12" stroke="#6c47ff" strokeWidth="2" strokeLinecap="round"/></svg>
             Add item
           </button>
@@ -398,10 +443,21 @@ export default function EditDocumentPage({ params }: { params: { id: string } })
 
         <div className="q-card" style={{ padding: 20, marginBottom: 20 }}>
           <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--purple)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 14 }}>Notes</div>
-          <textarea className="q-textarea" rows={4} value={notes} onChange={e => setNotes(e.target.value)} placeholder="Any additional notes..."/>
+          <textarea
+            className="q-textarea"
+            rows={4}
+            value={notes}
+            onChange={e => setNotes(e.target.value)}
+            placeholder="Any additional notes..."
+          />
         </div>
 
-        <button onClick={handleSave} disabled={saving} className="q-btn-primary" style={{ marginBottom: 20 }}>
+        <button
+          onClick={handleSave}
+          disabled={saving}
+          className="q-btn-primary"
+          style={{ marginBottom: 20 }}
+        >
           {saving ? 'Saving...' : `Save ${isInvoice ? 'invoice' : 'quote'}`}
         </button>
       </div>
