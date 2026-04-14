@@ -48,7 +48,8 @@ export default function NewQuotePage() {
         setProfile(p)
         setCurrencyCode(p.currency_code || 'USD')
         setCurrencySymbol(p.currency_symbol || '$')
-        setVatRate(p.default_vat_rate || 0)
+        setVatRate(Number(p.default_vat_rate) || 0)
+        if (Number(p.default_vat_rate) > 0) setVatEnabled(true)
       }
       if (c) setClients(c)
     }
@@ -84,7 +85,7 @@ export default function NewQuotePage() {
       .select('*')
       .eq('user_id', user.id)
       .ilike('name', `%${query}%`)
-      .limit(5)
+      .limit(10)
     setItemSuggestions(data || [])
   }
 
@@ -187,7 +188,6 @@ export default function NewQuotePage() {
       )
     ])
 
-    setLoading(false)
     router.push(`/documents/${quote.id}`)
   }
 
@@ -542,7 +542,7 @@ export default function NewQuotePage() {
 
             {error && <div className="q-error">{error}</div>}
 
-            <button onClick={handleSubmit} disabled={loading} className="q-btn-primary">
+            <button onClick={handleSubmit} disabled={loading} className="q-btn-primary" style={{ opacity: loading ? 0.6 : 1, pointerEvents: loading ? 'none' : 'auto' }}>
               {loading ? 'Saving...' : 'Save quote'}
             </button>
           </div>

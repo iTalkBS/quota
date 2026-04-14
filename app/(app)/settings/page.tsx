@@ -1,16 +1,54 @@
 'use client'
 
 import Link from 'next/link'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { createClient } from '@/lib/supabase'
 import { useRouter } from 'next/navigation'
 import { countries } from '@/lib/countries'
 
 const DEFAULT_PAYMENT_TERMS = `- Prices are valid for 7 days from the date of this quotation.\n- Prices may change after the validity period.\n- When making payment, please use your name or company name as the payment reference.\n- For queries, please contact us via WhatsApp: `
 
+type FormState = {
+  business_name: string
+  contact_person: string
+  phone: string
+  email: string
+  address: string
+  registration_number: string
+  vat_registration_number: string
+  country: string
+  currency_code: string
+  currency_symbol: string
+  default_vat_rate: string
+  bank_name: string
+  bank_account_name: string
+  bank_account_number: string
+  bank_branch_code: string
+  bank_swift_code: string
+  payment_terms: string
+}
+
+const SectionHeader = ({ id, iconBg, icon, label, preview, expanded, onToggle }: any) => (
+  <button
+    className="q-collapsible-header"
+    onClick={() => onToggle(id)}
+    style={{ width: '100%' }}
+  >
+    <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+      <div className="q-settings-icon" style={{ background: iconBg }}>{icon}</div>
+      <div>
+        <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text)', textAlign: 'left' }}>{label}</div>
+        {preview && <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 1, textAlign: 'left' }}>{preview}</div>}
+      </div>
+    </div>
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+      <path d={expanded ? 'M4 10l4-4 4 4' : 'M4 6l4 4 4-4'} stroke="#a8a5c0" strokeWidth="1.5" strokeLinecap="round"/>
+    </svg>
+  </button>
+)
+
 export default function SettingsPage() {
-  const [profile, setProfile] = useState<any>(null)
-  const [form, setForm] = useState({
+  const [form, setForm] = useState<FormState>({
     business_name: '', contact_person: '', phone: '', email: '', address: '',
     registration_number: '', vat_registration_number: '',
     country: '', currency_code: '', currency_symbol: '',
@@ -20,9 +58,11 @@ export default function SettingsPage() {
   })
   const [countryCode, setCountryCode] = useState('')
   const [expandedSection, setExpandedSection] = useState<string | null>(null)
+  const [showProfile, setShowProfile] = useState(false)
   const [loading, setLoading] = useState(false)
   const [fetching, setFetching] = useState(true)
-  const [saved, setSaved] = useState(false)
+  const [savedSection, setSavedSection] = useState<string | null>(null)
+  const [dirtySection, setDirtySection] = useState<string | null>(null)
   const router = useRouter()
   const supabase = createClient()
 
@@ -32,7 +72,6 @@ export default function SettingsPage() {
       if (!user) return
       const { data } = await supabase.from('profiles').select('*').eq('id', user.id).single()
       if (data) {
-        setProfile(data)
         setForm({
           business_name: data.business_name || '',
           contact_person: data.contact_person || '',
@@ -60,17 +99,21 @@ export default function SettingsPage() {
     loadProfile()
   }, [])
 
-  const set = (field: string, value: string) => setForm(f => ({ ...f, [field]: value }))
+  const setField = useCallback((field: keyof FormState, value: string, section: string) => {
+    setForm(prev => ({ ...prev, [field]: value }))
+    setDirtySection(section)
+  }, [])
 
-  const handleCountryChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+  const handleCountryChange = useCallback((e: React.ChangeEvent<HTMLSelectElement>, section: string) => {
     const selected = countries.find(c => c.code === e.target.value)
     if (selected) {
       setCountryCode(selected.code)
-      setForm(f => ({ ...f, country: selected.name, currency_code: selected.currency_code, currency_symbol: selected.currency_symbol }))
+      setForm(prev => ({ ...prev, country: selected.name, currency_code: selected.currency_code, currency_symbol: selected.currency_symbol }))
+      setDirtySection(section)
     }
-  }
+  }, [])
 
-  const handleSave = async () => {
+  const handleSaveSection = useCallback(async (section: string) => {
     setLoading(true)
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return
@@ -79,144 +122,244 @@ export default function SettingsPage() {
       default_vat_rate: parseFloat(form.default_vat_rate) || 0,
     }).eq('id', user.id)
     setLoading(false)
-    setSaved(true)
-    setTimeout(() => setSaved(false), 3000)
-  }
+    setDirtySection(null)
+    setSavedSection(section)
+    setTimeout(() => setSavedSection(null), 2500)
+  }, [form])
 
   const handleSignOut = async () => {
     await supabase.auth.signOut()
     router.push('/login')
   }
 
-  const toggle = (s: string) => setExpandedSection(expandedSection === s ? null : s)
-
-  const Section = ({ id, icon, iconBg, label, preview, children }: any) => (
-    <div className="q-settings-section">
-      <button className="q-collapsible-header" onClick={() => toggle(id)}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          <div className="q-settings-icon" style={{ background: iconBg }}>{icon}</div>
-          <div>
-            <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text)' }}>{label}</div>
-            {preview && <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 1 }}>{preview}</div>}
-          </div>
-        </div>
-        <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-          <path d={expandedSection === id ? 'M4 10l4-4 4 4' : 'M4 6l4 4 4-4'} stroke="#a8a5c0" strokeWidth="1.5" strokeLinecap="round"/>
-        </svg>
-      </button>
-      {expandedSection === id && (
-        <div className="q-collapsible-body">{children}</div>
-      )}
-    </div>
-  )
-
-  const Field = ({ label, children }: any) => (
-    <div className="q-form-group">
-      <label className="q-label">{label}</label>
-      {children}
-    </div>
-  )
+  const toggle = useCallback((s: string) => {
+    setExpandedSection(prev => prev === s ? null : s)
+  }, [])
 
   if (fetching) return <div className="q-page"><div className="q-loading">Loading...</div></div>
 
   return (
     <div className="q-page">
       <div className="q-topbar">
-        <div style={{ width: 34 }} />
+        <div style={{ width: 34 }}/>
         <div className="q-topbar-title">Settings</div>
-        <div style={{ width: 34 }} />
+        <div style={{ width: 34 }}/>
       </div>
 
       <div className="q-scroll">
-        <div className="q-profile-card">
+        <div
+          className="q-profile-card"
+          onClick={() => setShowProfile(p => !p)}
+          style={{ cursor: 'pointer' }}
+        >
           <div style={{ width: 50, height: 50, borderRadius: '50%', background: 'rgba(255,255,255,0.2)', border: '2px solid rgba(255,255,255,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20, fontWeight: 800, color: '#fff' }}>
             {form.business_name?.[0]?.toUpperCase() || 'Q'}
           </div>
-          <div>
+          <div style={{ flex: 1 }}>
             <div style={{ fontSize: 16, fontWeight: 700, color: '#fff' }}>{form.business_name || 'Your business'}</div>
             <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.7)', marginTop: 2 }}>{form.country || 'Set your country'} · {form.currency_code || 'USD'}</div>
           </div>
+          <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+            <path d={showProfile ? 'M5 12l5-5 5 5' : 'M5 8l5 5 5-5'} stroke="rgba(255,255,255,0.8)" strokeWidth="2" strokeLinecap="round"/>
+          </svg>
         </div>
 
-        {saved && <div className="q-success">Settings saved successfully</div>}
+        {showProfile && (
+          <div style={{ marginBottom: 14 }}>
 
-        <Section
-          id="business"
-          iconBg="var(--purple-bg)"
-          icon={<svg width="16" height="16" viewBox="0 0 16 16" fill="none"><rect x="2" y="2" width="12" height="12" rx="3" stroke="#6c47ff" strokeWidth="1.5"/><path d="M5 8h6M5 5h4M5 11h3" stroke="#6c47ff" strokeWidth="1.5" strokeLinecap="round"/></svg>}
-          label="Business profile"
-          preview={form.business_name ? `${form.business_name} · ${form.phone}` : 'Set your business details'}
-        >
-          <Field label="Business name"><input className="q-input" value={form.business_name} onChange={e => set('business_name', e.target.value)} placeholder="Your business name"/></Field>
-          <Field label="Contact person"><input className="q-input" value={form.contact_person} onChange={e => set('contact_person', e.target.value)} placeholder="Full name"/></Field>
-          <Field label="Phone"><input className="q-input" type="tel" value={form.phone} onChange={e => set('phone', e.target.value)} placeholder="+27 123 456 789"/></Field>
-          <Field label="Email"><input className="q-input" type="email" value={form.email} onChange={e => set('email', e.target.value)} placeholder="you@example.com"/></Field>
-          <Field label="Address"><input className="q-input" value={form.address} onChange={e => set('address', e.target.value)} placeholder="Business address"/></Field>
-        </Section>
+            <div className="q-settings-section">
+              <SectionHeader
+                id="business"
+                iconBg="var(--purple-bg)"
+                icon={<svg width="16" height="16" viewBox="0 0 16 16" fill="none"><rect x="2" y="2" width="12" height="12" rx="3" stroke="#6c47ff" strokeWidth="1.5"/><path d="M5 8h6M5 5h4M5 11h3" stroke="#6c47ff" strokeWidth="1.5" strokeLinecap="round"/></svg>}
+                label="Business profile"
+                preview={form.business_name ? `${form.business_name} · ${form.phone}` : 'Set your business details'}
+                expanded={expandedSection === 'business'}
+                onToggle={toggle}
+              />
+              {expandedSection === 'business' && (
+                <div className="q-collapsible-body">
+                  <div className="q-form-group">
+                    <label className="q-label">Business name</label>
+                    <input className="q-input" value={form.business_name} onChange={e => setField('business_name', e.target.value, 'business')} placeholder="Your business name"/>
+                  </div>
+                  <div className="q-form-group">
+                    <label className="q-label">Contact person</label>
+                    <input className="q-input" value={form.contact_person} onChange={e => setField('contact_person', e.target.value, 'business')} placeholder="Full name"/>
+                  </div>
+                  <div className="q-form-group">
+                    <label className="q-label">Phone</label>
+                    <input className="q-input" type="tel" value={form.phone} onChange={e => setField('phone', e.target.value, 'business')} placeholder="+27 123 456 789"/>
+                  </div>
+                  <div className="q-form-group">
+                    <label className="q-label">Email</label>
+                    <input className="q-input" type="email" value={form.email} onChange={e => setField('email', e.target.value, 'business')} placeholder="you@example.com"/>
+                  </div>
+                  <div className="q-form-group">
+                    <label className="q-label">Address</label>
+                    <input className="q-input" value={form.address} onChange={e => setField('address', e.target.value, 'business')} placeholder="Business address"/>
+                  </div>
+                  {dirtySection === 'business' && (
+                    <button onClick={() => handleSaveSection('business')} disabled={loading} className="q-btn-primary" style={{ marginTop: 4 }}>
+                      {loading ? 'Saving...' : 'Save changes'}
+                    </button>
+                  )}
+                  {savedSection === 'business' && <div className="q-success" style={{ marginTop: 8 }}>Saved successfully</div>}
+                </div>
+              )}
+            </div>
 
-        <Section
-          id="registration"
-          iconBg="var(--green-bg)"
-          icon={<svg width="16" height="16" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="6" stroke="#00c27a" strokeWidth="1.5"/><path d="M5 8l2 2 4-4" stroke="#00c27a" strokeWidth="1.5" strokeLinecap="round"/></svg>}
-          label="Registration details"
-          preview="Company reg · VAT number"
-        >
-          <Field label="Company registration number"><input className="q-input" value={form.registration_number} onChange={e => set('registration_number', e.target.value)} placeholder="e.g. 2024/123456/07"/></Field>
-          <Field label="VAT registration number"><input className="q-input" value={form.vat_registration_number} onChange={e => set('vat_registration_number', e.target.value)} placeholder="e.g. 4123456789"/></Field>
-          <div style={{ fontSize: 12, color: 'var(--text3)', marginTop: -8 }}>Leave blank if not VAT registered</div>
-        </Section>
+            <div className="q-settings-section">
+              <SectionHeader
+                id="registration"
+                iconBg="var(--green-bg)"
+                icon={<svg width="16" height="16" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="6" stroke="#00c27a" strokeWidth="1.5"/><path d="M5 8l2 2 4-4" stroke="#00c27a" strokeWidth="1.5" strokeLinecap="round"/></svg>}
+                label="Registration details"
+                preview="Company reg · VAT number"
+                expanded={expandedSection === 'registration'}
+                onToggle={toggle}
+              />
+              {expandedSection === 'registration' && (
+                <div className="q-collapsible-body">
+                  <div className="q-form-group">
+                    <label className="q-label">Company registration number</label>
+                    <input className="q-input" value={form.registration_number} onChange={e => setField('registration_number', e.target.value, 'registration')} placeholder="e.g. 2024/123456/07"/>
+                  </div>
+                  <div className="q-form-group">
+                    <label className="q-label">VAT registration number</label>
+                    <input className="q-input" value={form.vat_registration_number} onChange={e => setField('vat_registration_number', e.target.value, 'registration')} placeholder="e.g. 4123456789"/>
+                  </div>
+                  <div style={{ fontSize: 12, color: 'var(--text3)', marginBottom: 12 }}>Leave blank if not VAT registered</div>
+                  {dirtySection === 'registration' && (
+                    <button onClick={() => handleSaveSection('registration')} disabled={loading} className="q-btn-primary">
+                      {loading ? 'Saving...' : 'Save changes'}
+                    </button>
+                  )}
+                  {savedSection === 'registration' && <div className="q-success" style={{ marginTop: 8 }}>Saved successfully</div>}
+                </div>
+              )}
+            </div>
 
-        <Section
-          id="currency"
-          iconBg="var(--orange-bg)"
-          icon={<svg width="16" height="16" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="6" stroke="#ff7a2f" strokeWidth="1.5"/><path d="M8 5v3l2 2" stroke="#ff7a2f" strokeWidth="1.5" strokeLinecap="round"/></svg>}
-          label="Country and currency"
-          preview={form.country ? `${form.country} · ${form.currency_code} (${form.currency_symbol})` : 'Set your country'}
-        >
-          <Field label="Country">
-            <select className="q-select" value={countryCode} onChange={handleCountryChange}>
-              <option value="">Select your country</option>
-              {countries.map(c => <option key={c.code} value={c.code}>{c.name} ({c.currency_code})</option>)}
-            </select>
-          </Field>
-          {form.currency_code && (
-            <div className="q-info" style={{ marginBottom: 14 }}>Currency set to <strong>{form.currency_code} ({form.currency_symbol})</strong></div>
-          )}
-          <Field label="Default VAT rate (%)">
-            <input className="q-input" type="number" value={form.default_vat_rate} onChange={e => set('default_vat_rate', e.target.value)} placeholder="e.g. 15"/>
-          </Field>
-          <div style={{ fontSize: 12, color: 'var(--text3)', marginTop: -8 }}>Set to 0 if you do not charge VAT</div>
-        </Section>
+            <div className="q-settings-section">
+              <SectionHeader
+                id="currency"
+                iconBg="var(--orange-bg)"
+                icon={<svg width="16" height="16" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="6" stroke="#ff7a2f" strokeWidth="1.5"/><path d="M8 5v3l2 2" stroke="#ff7a2f" strokeWidth="1.5" strokeLinecap="round"/></svg>}
+                label="Country and currency"
+                preview={form.country ? `${form.country} · ${form.currency_code} (${form.currency_symbol})` : 'Set your country'}
+                expanded={expandedSection === 'currency'}
+                onToggle={toggle}
+              />
+              {expandedSection === 'currency' && (
+                <div className="q-collapsible-body">
+                  <div className="q-form-group">
+                    <label className="q-label">Country</label>
+                    <select className="q-select" value={countryCode} onChange={e => handleCountryChange(e, 'currency')}>
+                      <option value="">Select your country</option>
+                      {countries.map(c => <option key={c.code} value={c.code}>{c.name} ({c.currency_code})</option>)}
+                    </select>
+                  </div>
+                  {form.currency_code && (
+                    <div className="q-info" style={{ marginBottom: 14 }}>Currency: <strong>{form.currency_code} ({form.currency_symbol})</strong></div>
+                  )}
+                  <div className="q-form-group">
+                    <label className="q-label">Default VAT rate (%)</label>
+                    <input className="q-input" type="number" value={form.default_vat_rate} onChange={e => setField('default_vat_rate', e.target.value, 'currency')} placeholder="e.g. 15"/>
+                  </div>
+                  <div style={{ fontSize: 12, color: 'var(--text3)', marginBottom: 12 }}>Set to 0 if you do not charge VAT</div>
+                  {dirtySection === 'currency' && (
+                    <button onClick={() => handleSaveSection('currency')} disabled={loading} className="q-btn-primary">
+                      {loading ? 'Saving...' : 'Save changes'}
+                    </button>
+                  )}
+                  {savedSection === 'currency' && <div className="q-success" style={{ marginTop: 8 }}>Saved successfully</div>}
+                </div>
+              )}
+            </div>
 
-        <Section
-          id="banking"
-          iconBg="var(--yellow-bg)"
-          icon={<svg width="16" height="16" viewBox="0 0 16 16" fill="none"><rect x="2" y="4" width="12" height="9" rx="2" stroke="#b38f00" strokeWidth="1.5"/><path d="M2 7h12" stroke="#b38f00" strokeWidth="1.5"/><path d="M5 10h2M10 10h1" stroke="#b38f00" strokeWidth="1.5" strokeLinecap="round"/></svg>}
-          label="Banking details"
-          preview={form.bank_name ? `${form.bank_name} · ${form.bank_account_number ? '••••' + form.bank_account_number.slice(-4) : 'No account'}` : 'Add your bank details'}
-        >
-          <Field label="Bank name"><input className="q-input" value={form.bank_name} onChange={e => set('bank_name', e.target.value)} placeholder="e.g. First National Bank"/></Field>
-          <Field label="Account name"><input className="q-input" value={form.bank_account_name} onChange={e => set('bank_account_name', e.target.value)} placeholder="Name on the account"/></Field>
-          <Field label="Account number"><input className="q-input" value={form.bank_account_number} onChange={e => set('bank_account_number', e.target.value)} placeholder="Your account number"/></Field>
-          <Field label="Branch code"><input className="q-input" value={form.bank_branch_code} onChange={e => set('bank_branch_code', e.target.value)} placeholder="e.g. 250655"/></Field>
-          <Field label="SWIFT code">
-            <input className="q-input" value={form.bank_swift_code} onChange={e => set('bank_swift_code', e.target.value)} placeholder="e.g. FIRNZAJJ"/>
-          </Field>
-          <div style={{ fontSize: 12, color: 'var(--text3)', marginTop: -8 }}>SWIFT code required for international payments</div>
-        </Section>
+            <div className="q-settings-section">
+              <SectionHeader
+                id="banking"
+                iconBg="var(--yellow-bg)"
+                icon={<svg width="16" height="16" viewBox="0 0 16 16" fill="none"><rect x="2" y="4" width="12" height="9" rx="2" stroke="#b38f00" strokeWidth="1.5"/><path d="M2 7h12" stroke="#b38f00" strokeWidth="1.5"/><path d="M5 10h2M10 10h1" stroke="#b38f00" strokeWidth="1.5" strokeLinecap="round"/></svg>}
+                label="Banking details"
+                preview={form.bank_name ? `${form.bank_name} · ${form.bank_account_number ? '••••' + form.bank_account_number.slice(-4) : ''}` : 'Add your bank details'}
+                expanded={expandedSection === 'banking'}
+                onToggle={toggle}
+              />
+              {expandedSection === 'banking' && (
+                <div className="q-collapsible-body">
+                  <div className="q-form-group">
+                    <label className="q-label">Bank name</label>
+                    <input className="q-input" value={form.bank_name} onChange={e => setField('bank_name', e.target.value, 'banking')} placeholder="e.g. First National Bank"/>
+                  </div>
+                  <div className="q-form-group">
+                    <label className="q-label">Account name</label>
+                    <input className="q-input" value={form.bank_account_name} onChange={e => setField('bank_account_name', e.target.value, 'banking')} placeholder="Name on the account"/>
+                  </div>
+                  <div className="q-form-group">
+                    <label className="q-label">Account number</label>
+                    <input className="q-input" value={form.bank_account_number} onChange={e => setField('bank_account_number', e.target.value, 'banking')} placeholder="Your account number"/>
+                  </div>
+                  <div className="q-form-group">
+                    <label className="q-label">Branch code</label>
+                    <input className="q-input" value={form.bank_branch_code} onChange={e => setField('bank_branch_code', e.target.value, 'banking')} placeholder="e.g. 250655"/>
+                  </div>
+                  <div className="q-form-group">
+                    <label className="q-label">SWIFT code</label>
+                    <input className="q-input" value={form.bank_swift_code} onChange={e => setField('bank_swift_code', e.target.value, 'banking')} placeholder="e.g. FIRNZAJJ"/>
+                  </div>
+                  <div style={{ fontSize: 12, color: 'var(--text3)', marginBottom: 12 }}>SWIFT code required for international payments</div>
+                  {dirtySection === 'banking' && (
+                    <button onClick={() => handleSaveSection('banking')} disabled={loading} className="q-btn-primary">
+                      {loading ? 'Saving...' : 'Save changes'}
+                    </button>
+                  )}
+                  {savedSection === 'banking' && <div className="q-success" style={{ marginTop: 8 }}>Saved successfully</div>}
+                </div>
+              )}
+            </div>
 
-        <Section
-          id="terms"
-          iconBg="var(--purple-bg)"
-          icon={<svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M3 4h10M3 8h7M3 12h5" stroke="#6c47ff" strokeWidth="1.5" strokeLinecap="round"/></svg>}
-          label="Payment terms"
-          preview="Appears on every quote and invoice"
-        >
-          <Field label="Payment terms">
-            <textarea className="q-textarea" rows={8} value={form.payment_terms} onChange={e => set('payment_terms', e.target.value)}/>
-          </Field>
-          <div style={{ fontSize: 12, color: 'var(--text3)', marginTop: -8 }}>These terms appear at the bottom of every PDF</div>
-        </Section>
+            <div className="q-settings-section">
+              <SectionHeader
+                id="terms"
+                iconBg="var(--purple-bg)"
+                icon={<svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M3 4h10M3 8h7M3 12h5" stroke="#6c47ff" strokeWidth="1.5" strokeLinecap="round"/></svg>}
+                label="Payment terms"
+                preview="Appears on every quote and invoice"
+                expanded={expandedSection === 'terms'}
+                onToggle={toggle}
+              />
+              {expandedSection === 'terms' && (
+                <div className="q-collapsible-body">
+                  <div className="q-form-group">
+                    <label className="q-label">Payment terms</label>
+                    <textarea className="q-textarea" rows={8} value={form.payment_terms} onChange={e => setField('payment_terms', e.target.value, 'terms')}/>
+                  </div>
+                  <div style={{ fontSize: 12, color: 'var(--text3)', marginBottom: 12 }}>These terms appear at the bottom of every PDF</div>
+                  {dirtySection === 'terms' && (
+                    <button onClick={() => handleSaveSection('terms')} disabled={loading} className="q-btn-primary">
+                      {loading ? 'Saving...' : 'Save changes'}
+                    </button>
+                  )}
+                  {savedSection === 'terms' && <div className="q-success" style={{ marginTop: 8 }}>Saved successfully</div>}
+                </div>
+              )}
+            </div>
+
+            <div className="q-settings-section" style={{ marginBottom: 10 }}>
+              <button
+                onClick={handleSignOut}
+                style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 12, padding: '14px 16px', background: 'none', border: 'none', cursor: 'pointer' }}
+              >
+                <div className="q-settings-icon" style={{ background: 'var(--red-bg)' }}>
+                  <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M6 3H3a1 1 0 00-1 1v8a1 1 0 001 1h3M10 11l3-3-3-3M13 8H6" stroke="#ff4060" strokeWidth="1.5" strokeLinecap="round"/></svg>
+                </div>
+                <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--red)' }}>Sign out</div>
+              </button>
+            </div>
+          </div>
+        )}
 
         <Link href="/settings/items" className="q-settings-section" style={{ display: 'block', textDecoration: 'none' }}>
           <div className="q-settings-row" style={{ border: 'none' }}>
@@ -232,15 +375,6 @@ export default function SettingsPage() {
             <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M6 4l4 4-4 4" stroke="#a8a5c0" strokeWidth="1.5" strokeLinecap="round"/></svg>
           </div>
         </Link>
-
-        <button onClick={handleSave} disabled={loading} className="q-btn-primary" style={{ marginBottom: 10 }}>
-          {loading ? 'Saving...' : 'Save settings'}
-        </button>
-
-        <button onClick={handleSignOut} className="q-btn-danger">
-          <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M6 3H3a1 1 0 00-1 1v8a1 1 0 001 1h3M10 11l3-3-3-3M13 8H6" stroke="#ff4060" strokeWidth="1.5" strokeLinecap="round"/></svg>
-          Sign out
-        </button>
       </div>
 
       <nav className="q-bottomnav">

@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { createClient } from '@/lib/supabase'
 import { useRouter } from 'next/navigation'
 
@@ -22,47 +22,67 @@ export default function ItemsDirectoryPage() {
   const [editItem, setEditItem] = useState<ItemForm>(emptyForm)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
+  const userIdRef = useRef<string | null>(null)
 
   useEffect(() => {
     const init = async () => {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) return
       setUserId(user.id)
-      const { data } = await supabase.from('items_directory').select('*').eq('user_id', user.id).order('name')
+      userIdRef.current = user.id
+      const { data } = await supabase
+        .from('items_directory')
+        .select('*')
+        .eq('user_id', user.id)
+        .order('name')
       if (data) setItems(data)
       setLoading(false)
     }
     init()
   }, [])
 
-  const reload = useCallback(async () => {
-    if (!userId) return
-    const { data } = await supabase.from('items_directory').select('*').eq('user_id', userId).order('name')
+  const reload = async () => {
+    const uid = userIdRef.current
+    if (!uid) return
+    const { data } = await supabase
+      .from('items_directory')
+      .select('*')
+      .eq('user_id', uid)
+      .order('name')
     if (data) setItems(data)
-  }, [userId])
+  }
 
   const handleAdd = async () => {
+    const uid = userIdRef.current
+    if (!uid) { setError('Session expired. Please refresh the page.'); return }
     if (!newItem.name) { setError('Item name is required'); return }
     setSaving(true)
     setError('')
     const { error: e } = await supabase.from('items_directory').insert({
-      user_id: userId,
+      user_id: uid,
       name: newItem.name.trim(),
       description: newItem.description,
       type: newItem.type,
       default_unit_price: parseFloat(newItem.default_unit_price) || 0,
     })
-    if (e) { setError(e.message) } else {
+    if (e) {
+      setError(e.message)
+    } else {
       setNewItem(emptyForm)
       setShowAdd(false)
-      reload()
+      await reload()
     }
     setSaving(false)
   }
 
   const startEdit = (item: Item) => {
     setEditingId(item.id)
-    setEditItem({ name: item.name, description: item.description || '', type: item.type, default_unit_price: item.default_unit_price.toString() })
+    setEditItem({
+      name: item.name,
+      description: item.description || '',
+      type: item.type,
+      default_unit_price: item.default_unit_price.toString(),
+    })
   }
 
   const handleSaveEdit = async () => {
@@ -74,7 +94,7 @@ export default function ItemsDirectoryPage() {
       default_unit_price: parseFloat(editItem.default_unit_price) || 0,
     }).eq('id', editingId)
     setEditingId(null)
-    reload()
+    await reload()
     setSaving(false)
   }
 
@@ -84,7 +104,9 @@ export default function ItemsDirectoryPage() {
     setItems(prev => prev.filter(i => i.id !== id))
   }
 
-  const filtered = items.filter(i => i.name.toLowerCase().includes(search.toLowerCase()))
+  const filtered = items.filter(i =>
+    i.name.toLowerCase().includes(search.toLowerCase())
+  )
 
   return (
     <div className="q-page">
@@ -104,7 +126,11 @@ export default function ItemsDirectoryPage() {
             <circle cx="6.5" cy="6.5" r="5" stroke="#a8a5c0" strokeWidth="1.5"/>
             <path d="M11 11l3 3" stroke="#a8a5c0" strokeWidth="1.5" strokeLinecap="round"/>
           </svg>
-          <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search items..."/>
+          <input
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            placeholder="Search items..."
+          />
           {search && (
             <button onClick={() => setSearch('')} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text3)', fontSize: 18, lineHeight: 1, padding: 0 }}>×</button>
           )}
@@ -116,26 +142,60 @@ export default function ItemsDirectoryPage() {
             {error && <div className="q-error">{error}</div>}
             <div className="q-form-group">
               <label className="q-label">Name <span style={{ color: 'var(--red)' }}>*</span></label>
-              <input className="q-input" value={newItem.name} onChange={e => setNewItem(prev => ({ ...prev, name: e.target.value }))} placeholder="Item name" autoFocus/>
+              <input
+                className="q-input"
+                value={newItem.name}
+                onChange={e => setNewItem(prev => ({ ...prev, name: e.target.value }))}
+                placeholder="Item name"
+                autoFocus
+              />
             </div>
             <div className="q-form-group">
               <label className="q-label">Description</label>
-              <input className="q-input" value={newItem.description} onChange={e => setNewItem(prev => ({ ...prev, description: e.target.value }))} placeholder="Optional description"/>
+              <input
+                className="q-input"
+                value={newItem.description}
+                onChange={e => setNewItem(prev => ({ ...prev, description: e.target.value }))}
+                placeholder="Optional description"
+              />
             </div>
             <div className="q-form-group">
               <label className="q-label">Type</label>
-              <select className="q-select" value={newItem.type} onChange={e => setNewItem(prev => ({ ...prev, type: e.target.value }))}>
+              <select
+                className="q-select"
+                value={newItem.type}
+                onChange={e => setNewItem(prev => ({ ...prev, type: e.target.value }))}
+              >
                 <option value="product">Product</option>
                 <option value="service">Service</option>
               </select>
             </div>
             <div className="q-form-group">
               <label className="q-label">Default unit price (selling price)</label>
-              <input className="q-input" type="number" value={newItem.default_unit_price} onChange={e => setNewItem(prev => ({ ...prev, default_unit_price: e.target.value }))} onFocus={e => e.target.select()} placeholder="0.00" min="0"/>
+              <input
+                className="q-input"
+                type="number"
+                value={newItem.default_unit_price}
+                onChange={e => setNewItem(prev => ({ ...prev, default_unit_price: e.target.value }))}
+                onFocus={e => e.target.select()}
+                placeholder="0.00"
+                min="0"
+              />
             </div>
             <div style={{ display: 'flex', gap: 10 }}>
-              <button onClick={() => { setShowAdd(false); setError(''); setNewItem(emptyForm) }} className="q-btn-secondary" style={{ flex: 1 }}>Cancel</button>
-              <button onClick={handleAdd} disabled={saving || !newItem.name} className="q-btn-primary" style={{ flex: 1 }}>
+              <button
+                onClick={() => { setShowAdd(false); setError(''); setNewItem(emptyForm) }}
+                className="q-btn-secondary"
+                style={{ flex: 1 }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleAdd}
+                disabled={saving || !newItem.name}
+                className="q-btn-primary"
+                style={{ flex: 1 }}
+              >
                 {saving ? 'Saving...' : 'Add item'}
               </button>
             </div>
@@ -169,22 +229,43 @@ export default function ItemsDirectoryPage() {
                   <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--purple)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 14 }}>Edit item</div>
                   <div className="q-form-group">
                     <label className="q-label">Name</label>
-                    <input className="q-input" value={editItem.name} onChange={e => setEditItem(prev => ({ ...prev, name: e.target.value }))} autoFocus/>
+                    <input
+                      className="q-input"
+                      value={editItem.name}
+                      onChange={e => setEditItem(prev => ({ ...prev, name: e.target.value }))}
+                      autoFocus
+                    />
                   </div>
                   <div className="q-form-group">
                     <label className="q-label">Description</label>
-                    <input className="q-input" value={editItem.description} onChange={e => setEditItem(prev => ({ ...prev, description: e.target.value }))} placeholder="Optional"/>
+                    <input
+                      className="q-input"
+                      value={editItem.description}
+                      onChange={e => setEditItem(prev => ({ ...prev, description: e.target.value }))}
+                      placeholder="Optional"
+                    />
                   </div>
                   <div className="q-form-group">
                     <label className="q-label">Type</label>
-                    <select className="q-select" value={editItem.type} onChange={e => setEditItem(prev => ({ ...prev, type: e.target.value }))}>
+                    <select
+                      className="q-select"
+                      value={editItem.type}
+                      onChange={e => setEditItem(prev => ({ ...prev, type: e.target.value }))}
+                    >
                       <option value="product">Product</option>
                       <option value="service">Service</option>
                     </select>
                   </div>
                   <div className="q-form-group">
                     <label className="q-label">Default unit price (selling price)</label>
-                    <input className="q-input" type="number" value={editItem.default_unit_price} onChange={e => setEditItem(prev => ({ ...prev, default_unit_price: e.target.value }))} onFocus={e => e.target.select()} min="0"/>
+                    <input
+                      className="q-input"
+                      type="number"
+                      value={editItem.default_unit_price}
+                      onChange={e => setEditItem(prev => ({ ...prev, default_unit_price: e.target.value }))}
+                      onFocus={e => e.target.select()}
+                      min="0"
+                    />
                   </div>
                   <div style={{ display: 'flex', gap: 10 }}>
                     <button onClick={() => setEditingId(null)} className="q-btn-secondary" style={{ flex: 1 }}>Cancel</button>
