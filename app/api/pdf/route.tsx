@@ -92,7 +92,7 @@ export async function GET(request: NextRequest) {
     }
 
     const isInvoice = quote.type === 'invoice'
-    const hasBanking = profile?.bank_name || profile?.bank_account_number
+    const hasBanking = (profile?.bank_name || profile?.bank_account_number) && quote.status !== 'paid'
     const totalPaid = (payments || []).reduce((sum: number, p: any) => sum + Number(p.amount), 0)
     const balance = Math.max(0, Number(quote.total) - totalPaid)
     const isFullyPaid = balance <= 0
@@ -109,8 +109,7 @@ export async function GET(request: NextRequest) {
           <View style={styles.header}>
             <View>
               <Text style={styles.businessName}>{profile?.business_name || 'My Business'}</Text>
-              {profile?.contact_person && <Text style={styles.businessDetail}>{profile.contact_person}</Text>}
-              {profile?.phone && <Text style={styles.businessDetail}>{profile.phone}</Text>}
+                            {profile?.phone && <Text style={styles.businessDetail}>{profile.phone}</Text>}
               {profile?.email && <Text style={styles.businessDetail}>{profile.email}</Text>}
               {profile?.address && <Text style={styles.businessDetail}>{profile.address}</Text>}
               {profile?.registration_number && <Text style={styles.businessDetail}>Reg No: {profile.registration_number}</Text>}
@@ -126,14 +125,15 @@ export async function GET(request: NextRequest) {
 
           <View style={styles.twoCol}>
             {client && (
-              <View style={styles.col}>
-                <Text style={styles.sectionLabel}>Bill to</Text>
-                <Text style={styles.clientName}>{client.name}</Text>
-                {client.phone && <Text style={styles.clientDetail}>{client.phone}</Text>}
-                {client.email && <Text style={styles.clientDetail}>{client.email}</Text>}
-                {client.address && <Text style={styles.clientDetail}>{client.address}</Text>}
-              </View>
-            )}
+                <View style={styles.col}>
+                  <Text style={styles.sectionLabel}>Bill to</Text>
+                  <Text style={styles.clientName}>{client.name}</Text>
+                  {client.contact_person && <Text style={styles.clientDetail}>Attn: {client.contact_person}</Text>}
+                  {client.phone && <Text style={styles.clientDetail}>{client.phone}</Text>}
+                  {client.email && <Text style={styles.clientDetail}>{client.email}</Text>}
+                  {client.address && <Text style={styles.clientDetail}>{client.address}</Text>}
+                </View>
+              )}
             <View style={[styles.col, { alignItems: 'flex-end' }]}>
               <View style={styles.dateBlock}>
                 <Text style={styles.dateLabel}>Issue date</Text>

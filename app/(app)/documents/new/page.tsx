@@ -18,7 +18,7 @@ export default function NewQuotePage() {
   const [clients, setClients] = useState<Client[]>([])
   const [clientSearch, setClientSearch] = useState('')
   const [selectedClient, setSelectedClient] = useState<Client | null>(null)
-  const [newClient, setNewClient] = useState({ name: '', email: '', phone: '', address: '' })
+  const [newClient, setNewClient] = useState({ name: '', email: '', phone: '', address: '', contact_person: '' })
   const [isNewClient, setIsNewClient] = useState(false)
   const [items, setItems] = useState<Item[]>([{ name: '', description: '', item_type: 'product', quantity: '1', unit_price: '', line_total: 0 }])
   const [currencyCode, setCurrencyCode] = useState('USD')
@@ -312,6 +312,10 @@ if (pageLoading) return (
                 <div className="q-form-group">
                   <label className="q-label">Name <span style={{ color: 'var(--red)' }}>*</span></label>
                   <input className="q-input" value={newClient.name} onChange={e => setNewClient({ ...newClient, name: e.target.value })} placeholder="Client name"/>
+                </div>
+                <div className="q-form-group">
+                  <label className="q-label">Contact person</label>
+                  <input className="q-input" value={newClient.contact_person || ''} onChange={e => setNewClient({ ...newClient, contact_person: e.target.value })} placeholder="e.g. John Smith"/>
                 </div>
                 <div className="q-form-group">
                   <label className="q-label">Phone <span style={{ color: 'var(--red)' }}>*</span></label>

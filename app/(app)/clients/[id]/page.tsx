@@ -21,6 +21,7 @@ export default function ClientDetailPage({ params }: { params: { id: string } })
   const [loading, setLoading] = useState(true)
   const [editing, setEditing] = useState(false)
   const [name, setName] = useState('')
+  const [contactPerson, setContactPerson] = useState('')
   const [phone, setPhone] = useState('')
   const [email, setEmail] = useState('')
   const [address, setAddress] = useState('')
@@ -35,6 +36,7 @@ export default function ClientDetailPage({ params }: { params: { id: string } })
       if (clientData) {
         setClient(clientData)
         setName(clientData.name)
+        setContactPerson(clientData.contact_person || '')
         setPhone(clientData.phone || '')
         setEmail(clientData.email || '')
         setAddress(clientData.address || '')
@@ -50,8 +52,10 @@ export default function ClientDetailPage({ params }: { params: { id: string } })
   const handleSave = async () => {
     if (!name) return
     setSaving(true)
-    await supabase.from('clients').update({ name, phone, email, address }).eq('id', params.id)
-    setClient({ ...client, name, phone, email, address })
+    await supabase.from('clients').update({
+      name, contact_person: contactPerson, phone, email, address
+    }).eq('id', params.id)
+    setClient({ ...client, name, contact_person: contactPerson, phone, email, address })
     clearCache('clients')
     clearCache('dashboard')
     setSaving(false)
@@ -70,7 +74,7 @@ export default function ClientDetailPage({ params }: { params: { id: string } })
     const map: Record<string, string> = {
       paid: 'badge-paid', unpaid: 'badge-unpaid', overdue: 'badge-overdue',
       converted: 'badge-converted', sent: 'badge-sent', accepted: 'badge-accepted',
-      rejected: 'badge-rejected', draft: 'badge-draft',
+      rejected: 'badge-rejected', draft: 'badge-draft', partial: 'badge-partial',
     }
     return map[status] || 'badge-draft'
   }
@@ -139,7 +143,8 @@ export default function ClientDetailPage({ params }: { params: { id: string } })
             {getInitials(client.name)}
           </div>
           <div style={{ fontSize: 20, fontWeight: 800, color: 'var(--text)' }}>{client.name}</div>
-          {client.phone && <div style={{ fontSize: 13, color: 'var(--text3)', marginTop: 4 }}>{client.phone}</div>}
+          {client.contact_person && <div style={{ fontSize: 13, color: 'var(--text3)', marginTop: 4 }}>Attn: {client.contact_person}</div>}
+          {client.phone && <div style={{ fontSize: 13, color: 'var(--text3)', marginTop: 2 }}>{client.phone}</div>}
         </div>
 
         <div className="q-card" style={{ padding: 20, marginBottom: 12 }}>
@@ -148,8 +153,12 @@ export default function ClientDetailPage({ params }: { params: { id: string } })
           {editing ? (
             <div>
               <div className="q-form-group">
-                <label className="q-label">Name <span style={{ color: 'var(--red)' }}>*</span></label>
+                <label className="q-label">Company or client name <span style={{ color: 'var(--red)' }}>*</span></label>
                 <input className="q-input" value={name} onChange={e => setName(e.target.value)} placeholder="Client name"/>
+              </div>
+              <div className="q-form-group">
+                <label className="q-label">Contact person</label>
+                <input className="q-input" value={contactPerson} onChange={e => setContactPerson(e.target.value)} placeholder="e.g. John Smith"/>
               </div>
               <div className="q-form-group">
                 <label className="q-label">Phone</label>
@@ -170,6 +179,7 @@ export default function ClientDetailPage({ params }: { params: { id: string } })
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
               {[
+                { label: 'Contact', value: client.contact_person },
                 { label: 'Phone', value: client.phone },
                 { label: 'Email', value: client.email },
                 { label: 'Address', value: client.address },
@@ -179,7 +189,7 @@ export default function ClientDetailPage({ params }: { params: { id: string } })
                   <div style={{ fontSize: 14, color: 'var(--text)', flex: 1 }}>{f.value}</div>
                 </div>
               ))}
-              {!client.phone && !client.email && !client.address && (
+              {!client.phone && !client.email && !client.address && !client.contact_person && (
                 <div style={{ fontSize: 13, color: 'var(--text3)' }}>No additional details — tap Edit to add</div>
               )}
             </div>
@@ -211,10 +221,7 @@ export default function ClientDetailPage({ params }: { params: { id: string } })
         </div>
 
         {!showDeleteConfirm && (
-          <button
-            onClick={() => setShowDeleteConfirm(true)}
-            className="q-btn-danger"
-          >
+          <button onClick={() => setShowDeleteConfirm(true)} className="q-btn-danger">
             <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
               <path d="M2 3.5h10M4.5 3.5V2.5h5v1M5.5 6v4M8.5 6v4M3 3.5l.8 8h6.4l.8-8" stroke="#ff4060" strokeWidth="1.3" strokeLinecap="round"/>
             </svg>

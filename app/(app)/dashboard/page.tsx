@@ -56,16 +56,17 @@ export default function DashboardPage() {
     const map: Record<string, string> = {
       paid: 'badge-paid', unpaid: 'badge-unpaid', overdue: 'badge-overdue',
       converted: 'badge-converted', sent: 'badge-sent', accepted: 'badge-accepted',
-      rejected: 'badge-rejected', draft: 'badge-draft',
+      rejected: 'badge-rejected', draft: 'badge-draft', partial: 'badge-partial',
     }
     return map[status] || 'badge-draft'
   }
 
-  const totalQuotes = quotes.filter(q => q.type === 'quote').length
-  const unpaidInvoices = quotes.filter(q => q.type === 'invoice' && (q.status === 'unpaid' || q.status === 'overdue'))
-  const unpaidTotal = unpaidInvoices.reduce((sum, q) => sum + Number(q.total), 0)
+  const allQuotes = quotes.filter(q => q.type === 'quote')
+  const allInvoices = quotes.filter(q => q.type === 'invoice')
+  const unpaidInvoices = allInvoices.filter(q => q.status === 'unpaid' || q.status === 'overdue' || q.status === 'partial')
+  const unpaidTotal = unpaidInvoices.reduce((sum, q) => sum + Number(q.total) - Number(q.amount_paid || 0), 0)
   const unpaidSymbol = unpaidInvoices[0]?.currency_symbol || profile?.currency_symbol || ''
-  const paidInvoices = quotes.filter(q => q.type === 'invoice' && q.status === 'paid')
+  const paidInvoices = allInvoices.filter(q => q.status === 'paid')
   const totalRevenue = paidInvoices.reduce((sum, q) => sum + Number(q.total), 0)
   const recent = quotes.slice(0, 5)
   const isNewUser = !loading && profile !== null && !profile?.business_name
@@ -73,21 +74,16 @@ export default function DashboardPage() {
   return (
     <div className="q-page">
       <div className="q-header-gradient" style={{ paddingTop: 56 }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', position: 'relative', zIndex: 1 }}>
-          <div>
-            <div style={{ fontSize: 26, fontWeight: 800, color: '#fff', letterSpacing: -0.5 }}>Qouta</div>
-            <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.75)', marginTop: 2 }}>
-              {profile?.business_name || 'Welcome back'}
-            </div>
-          </div>
-          <div style={{ width: 40, height: 40, borderRadius: '50%', background: 'rgba(255,255,255,0.2)', border: '2px solid rgba(255,255,255,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16, fontWeight: 800, color: '#fff' }}>
-            {profile?.business_name?.[0]?.toUpperCase() || 'Q'}
+        <div style={{ position: 'relative', zIndex: 1 }}>
+          <div style={{ fontSize: 26, fontWeight: 800, color: '#fff', letterSpacing: -0.5 }}>Qouta</div>
+          <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.75)', marginTop: 2 }}>
+            {profile?.business_name || 'Welcome back'}
           </div>
         </div>
       </div>
 
       <div className="q-scroll" style={{ paddingTop: 24 }}>
- {showConfirmed && (
+        {showConfirmed && (
           <div style={{ background: 'var(--green-bg)', border: '1px solid rgba(0,194,122,0.3)', borderRadius: 'var(--radius-sm)', padding: '14px 16px', marginBottom: 16, display: 'flex', alignItems: 'center', gap: 12 }}>
             <svg width="20" height="20" viewBox="0 0 20 20" fill="none"><circle cx="10" cy="10" r="9" stroke="#00c27a" strokeWidth="1.5"/><path d="M6 10l3 3 5-5" stroke="#00c27a" strokeWidth="1.5" strokeLinecap="round"/></svg>
             <div>
@@ -95,8 +91,9 @@ export default function DashboardPage() {
               <div style={{ fontSize: 12, color: 'var(--text2)' }}>Welcome to Qouta. Your account is ready.</div>
             </div>
           </div>
-        )}       
-{loading ? (
+        )}
+
+        {loading ? (
           <div className="q-loading">Loading...</div>
         ) : isNewUser ? (
           <div>
@@ -125,12 +122,12 @@ export default function DashboardPage() {
           <>
             <div className="q-stat-grid">
               <div className="q-stat">
-                <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 6 }}>Total quotes</div>
-                <div style={{ fontSize: 28, fontWeight: 800, color: 'var(--text)', letterSpacing: -0.5 }}>{totalQuotes}</div>
-                <div style={{ fontSize: 11, color: 'var(--purple)', fontWeight: 600, marginTop: 3 }}>all time</div>
+                <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 6 }}>Quotes sent</div>
+                <div style={{ fontSize: 28, fontWeight: 800, color: 'var(--text)', letterSpacing: -0.5 }}>{allQuotes.length}</div>
+                <div style={{ fontSize: 11, color: 'var(--purple)', fontWeight: 600, marginTop: 3 }}>{allInvoices.length} invoice{allInvoices.length !== 1 ? 's' : ''}</div>
               </div>
               <div className="q-stat">
-                <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 6 }}>Unpaid</div>
+                <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 6 }}>Outstanding</div>
                 <div style={{ fontSize: 28, fontWeight: 800, color: 'var(--text)', letterSpacing: -0.5 }}>{unpaidInvoices.length}</div>
                 {unpaidInvoices.length > 0 && (
                   <div style={{ fontSize: 11, color: 'var(--orange)', fontWeight: 600, marginTop: 3 }}>

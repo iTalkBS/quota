@@ -5,6 +5,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { createClient } from '@/lib/supabase'
 import { useRouter } from 'next/navigation'
 import { countries } from '@/lib/countries'
+import { getCached, setCached, clearCache } from '@/lib/cache'
 
 const DEFAULT_PAYMENT_TERMS = `- Prices are valid for 7 days from the date of this quotation.\n- Prices may change after the validity period.\n- When making payment, please use your name or company name as the payment reference.\n- For queries, please contact us via WhatsApp: `
 
@@ -60,7 +61,7 @@ export default function SettingsPage() {
   const [expandedSection, setExpandedSection] = useState<string | null>(null)
   const [showProfile, setShowProfile] = useState(false)
   const [loading, setLoading] = useState(false)
-  const [fetching, setFetching] = useState(true)
+const [fetching, setFetching] = useState(false)
   const [savedSection, setSavedSection] = useState<string | null>(null)
   const [dirtySection, setDirtySection] = useState<string | null>(null)
   const router = useRouter()
@@ -68,6 +69,13 @@ export default function SettingsPage() {
 
   useEffect(() => {
     const loadProfile = async () => {
+      const cached = getCached('profile')
+      if (cached) {
+        setForm(cached.form)
+        setCountryCode(cached.countryCode || '')
+        setFetching(false)
+        return
+      }
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) return
       const { data } = await supabase.from('profiles').select('*').eq('id', user.id).single()
@@ -93,6 +101,28 @@ export default function SettingsPage() {
         })
         const found = countries.find(c => c.name === data.country)
         if (found) setCountryCode(found.code)
+        setCached('profile', {
+          form: {
+            business_name: data.business_name || '',
+            contact_person: data.contact_person || '',
+            phone: data.phone || '',
+            email: data.email || '',
+            address: data.address || '',
+            registration_number: data.registration_number || '',
+            vat_registration_number: data.vat_registration_number || '',
+            country: data.country || '',
+            currency_code: data.currency_code || '',
+            currency_symbol: data.currency_symbol || '',
+            default_vat_rate: data.default_vat_rate?.toString() || '',
+            bank_name: data.bank_name || '',
+            bank_account_name: data.bank_account_name || '',
+            bank_account_number: data.bank_account_number || '',
+            bank_branch_code: data.bank_branch_code || '',
+            bank_swift_code: data.bank_swift_code || '',
+            payment_terms: data.payment_terms || DEFAULT_PAYMENT_TERMS + (data.phone || ''),
+          },
+          countryCode: found?.code || '',
+        })
       }
       setFetching(false)
     }
@@ -124,6 +154,7 @@ export default function SettingsPage() {
     setLoading(false)
     setDirtySection(null)
     setSavedSection(section)
+    clearCache('profile')
     setTimeout(() => setSavedSection(null), 2500)
   }, [form])
 
@@ -165,6 +196,25 @@ export default function SettingsPage() {
           </div>
         ))}
       </div>
+      <nav className="q-bottomnav">
+        <Link href="/dashboard" className="q-nav-item">
+          <svg width="22" height="22" viewBox="0 0 22 22" fill="none"><rect x="2" y="2" width="8" height="8" rx="2" fill="#a8a5c0"/><rect x="12" y="2" width="8" height="8" rx="2" fill="#a8a5c0"/><rect x="2" y="12" width="8" height="8" rx="2" fill="#a8a5c0"/><rect x="12" y="12" width="8" height="8" rx="2" fill="#a8a5c0"/></svg>
+          <span className="q-nav-label">Dashboard</span>
+        </Link>
+        <Link href="/documents" className="q-nav-item">
+          <svg width="22" height="22" viewBox="0 0 22 22" fill="none"><path d="M5 3h12a2 2 0 012 2v12a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2zm2 5h8M7 11h8M7 15h5" stroke="#a8a5c0" strokeWidth="1.5" strokeLinecap="round"/></svg>
+          <span className="q-nav-label">Docs</span>
+        </Link>
+        <Link href="/clients" className="q-nav-item">
+          <svg width="22" height="22" viewBox="0 0 22 22" fill="none"><circle cx="11" cy="8" r="4" stroke="#a8a5c0" strokeWidth="1.5"/><path d="M3 20c0-4 3.6-7 8-7s8 3 8 7" stroke="#a8a5c0" strokeWidth="1.5" strokeLinecap="round"/></svg>
+          <span className="q-nav-label">Clients</span>
+        </Link>
+        <Link href="/settings" className="q-nav-item active">
+          <svg width="22" height="22" viewBox="0 0 22 22" fill="none"><circle cx="11" cy="11" r="3" stroke="#6c47ff" strokeWidth="1.5"/><path d="M11 2v2M11 18v2M2 11h2M18 11h2M4.9 4.9l1.4 1.4M15.7 15.7l1.4 1.4M4.9 17.1l1.4-1.4M15.7 6.3l1.4-1.4" stroke="#6c47ff" strokeWidth="1.5"/></svg>
+          <span className="q-nav-label" style={{ color: 'var(--purple)' }}>Settings</span>
+          <div className="q-nav-dot"/>
+        </Link>
+      </nav>
     </div>
   )
 
@@ -213,11 +263,7 @@ export default function SettingsPage() {
                     <label className="q-label">Business name</label>
                     <input className="q-input" value={form.business_name} onChange={e => setField('business_name', e.target.value, 'business')} placeholder="Your business name"/>
                   </div>
-                  <div className="q-form-group">
-                    <label className="q-label">Contact person</label>
-                    <input className="q-input" value={form.contact_person} onChange={e => setField('contact_person', e.target.value, 'business')} placeholder="Full name"/>
-                  </div>
-                  <div className="q-form-group">
+                                    <div className="q-form-group">
                     <label className="q-label">Phone</label>
                     <input className="q-input" type="tel" value={form.phone} onChange={e => setField('phone', e.target.value, 'business')} placeholder="+27 123 456 789"/>
                   </div>
