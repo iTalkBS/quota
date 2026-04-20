@@ -397,10 +397,33 @@ export default function QuoteDetailPage({ params }: { params: { id: string } }) 
       </div>
 
       <div style={{ position: 'fixed', right: 10, top: '40%', transform: 'translateY(-50%)', display: 'flex', flexDirection: 'column', gap: 8, zIndex: 50 }}>
-        <a href={'/api/pdf?id=' + quote.id} download={quote.quote_number + '.pdf'} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, background: 'var(--purple-bg)', border: 'none', borderRadius: 12, padding: '10px 8px', cursor: 'pointer', width: 56, boxShadow: '0 2px 8px rgba(0,0,0,0.08)', textDecoration: 'none' }}>
+        <button
+          onClick={async () => {
+            try {
+              const res = await fetch('/api/pdf?id=' + quote.id)
+              const blob = await res.blob()
+              const file = new File([blob], quote.quote_number + '.pdf', { type: 'application/pdf' })
+              if (navigator.share) {
+                await navigator.share({ files: [file], title: quote.quote_number })
+              } else {
+                const url = URL.createObjectURL(blob)
+                const a = document.createElement('a')
+                a.href = url
+                a.download = quote.quote_number + '.pdf'
+                document.body.appendChild(a)
+                a.click()
+                document.body.removeChild(a)
+                URL.revokeObjectURL(url)
+              }
+            } catch(e) {
+              window.open('/api/pdf?id=' + quote.id, '_blank')
+            }
+          }}
+          style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, background: 'var(--purple-bg)', border: 'none', borderRadius: 12, padding: '10px 8px', cursor: 'pointer', width: 56, boxShadow: '0 2px 8px rgba(0,0,0,0.08)' }}
+        >
           <svg width='20' height='20' viewBox='0 0 20 20' fill='none'><path d='M10 2v11M6 9l4 4 4-4' stroke='#6c47ff' strokeWidth='1.5' strokeLinecap='round'/><path d='M4 15h12' stroke='#6c47ff' strokeWidth='1.5' strokeLinecap='round'/></svg>
           <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--purple)', textAlign: 'center', lineHeight: 1.2 }}>PDF</span>
-        </a>
+        </button>
         {client?.phone && (
           <ActionBtn onClick={handleWhatsApp}
             icon={<svg width='20' height='20' viewBox='0 0 20 20' fill='none'><path d='M10 1.5A8.5 8.5 0 0118.5 10c0 4.69-3.81 8.5-8.5 8.5a8.44 8.44 0 01-4.25-1.14L1.5 18.5l1.18-3.62A8.44 8.44 0 011.5 10 8.5 8.5 0 0110 1.5z' stroke='#00c27a' strokeWidth='1.5'/><path d='M7 9c.57 1.14 1.71 2.86 4 4' stroke='#00c27a' strokeWidth='1.5' strokeLinecap='round'/></svg>}
