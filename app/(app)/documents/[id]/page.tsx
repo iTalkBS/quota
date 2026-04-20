@@ -417,6 +417,9 @@ export default function QuoteDetailPage({ params }: { params: { id: string } }) 
                 URL.revokeObjectURL(url)
               }
             }
+            } catch(e) {
+              window.open('/api/pdf?id=' + quote.id, '_blank')
+            }
           }}
           style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, background: 'var(--purple-bg)', border: 'none', borderRadius: 12, padding: '10px 8px', cursor: 'pointer', width: 56, boxShadow: '0 2px 8px rgba(0,0,0,0.08)' }}
         >
