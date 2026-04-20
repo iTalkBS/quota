@@ -402,8 +402,9 @@ export default function QuoteDetailPage({ params }: { params: { id: string } }) 
             try {
               const res = await fetch('/api/pdf?id=' + quote.id)
               const blob = await res.blob()
-              const file = new File([blob], quote.quote_number + '.pdf', { type: 'application/pdf' })
-              if (navigator.share) {
+              const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent)
+              if (isMobile && navigator.share) {
+                const file = new File([blob], quote.quote_number + '.pdf', { type: 'application/pdf' })
                 await navigator.share({ files: [file], title: quote.quote_number })
               } else {
                 const url = URL.createObjectURL(blob)
@@ -415,8 +416,6 @@ export default function QuoteDetailPage({ params }: { params: { id: string } }) 
                 document.body.removeChild(a)
                 URL.revokeObjectURL(url)
               }
-            } catch(e) {
-              window.open('/api/pdf?id=' + quote.id, '_blank')
             }
           }}
           style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, background: 'var(--purple-bg)', border: 'none', borderRadius: 12, padding: '10px 8px', cursor: 'pointer', width: 56, boxShadow: '0 2px 8px rgba(0,0,0,0.08)' }}
