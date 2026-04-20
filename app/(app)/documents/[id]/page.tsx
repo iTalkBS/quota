@@ -295,7 +295,6 @@ export default function QuoteDetailPage({ params }: { params: { id: string } }) 
             <div style={{ marginBottom: 14 }}>
               <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 6 }}>Bill to</div>
               <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--text)' }}>{client.name}</div>
-              {client.contact_person && <div style={{ fontSize: 12, color: 'var(--text3)', marginTop: 2 }}>Attn: {client.contact_person}</div>}
               {client.phone && <div style={{ fontSize: 12, color: 'var(--text3)', marginTop: 2 }}>{client.phone}</div>}
               {client.email && <div style={{ fontSize: 12, color: 'var(--text3)' }}>{client.email}</div>}
               {client.address && <div style={{ fontSize: 12, color: 'var(--text3)' }}>{client.address}</div>}
@@ -398,27 +397,10 @@ export default function QuoteDetailPage({ params }: { params: { id: string } }) 
       </div>
 
       <div style={{ position: 'fixed', right: 10, top: '40%', transform: 'translateY(-50%)', display: 'flex', flexDirection: 'column', gap: 8, zIndex: 50 }}>
-        <a <button
-          onClick={async () => {
-            const res = await fetch('/api/pdf?id=' + quote.id)
-            const blob = await res.blob()
-            const file = new File([blob], quote.quote_number + '.pdf', { type: 'application/pdf' })
-            if (navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
-              await navigator.share({ files: [file], title: quote.quote_number })
-            } else {
-              const url = URL.createObjectURL(blob)
-              const a = document.createElement('a')
-              a.href = url
-              a.download = quote.quote_number + '.pdf'
-              a.click()
-              URL.revokeObjectURL(url)
-            }
-          }}
-          style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, background: 'var(--purple-bg)', border: 'none', borderRadius: 12, padding: '10px 8px', cursor: 'pointer', width: 56, boxShadow: '0 2px 8px rgba(0,0,0,0.08)' }}
-        >
+        <a href={'/api/pdf?id=' + quote.id} download={quote.quote_number + '.pdf'} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, background: 'var(--purple-bg)', border: 'none', borderRadius: 12, padding: '10px 8px', cursor: 'pointer', width: 56, boxShadow: '0 2px 8px rgba(0,0,0,0.08)', textDecoration: 'none' }}>
           <svg width='20' height='20' viewBox='0 0 20 20' fill='none'><path d='M10 2v11M6 9l4 4 4-4' stroke='#6c47ff' strokeWidth='1.5' strokeLinecap='round'/><path d='M4 15h12' stroke='#6c47ff' strokeWidth='1.5' strokeLinecap='round'/></svg>
           <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--purple)', textAlign: 'center', lineHeight: 1.2 }}>PDF</span>
-        </button>
+        </a>
         {client?.phone && (
           <ActionBtn onClick={handleWhatsApp}
             icon={<svg width='20' height='20' viewBox='0 0 20 20' fill='none'><path d='M10 1.5A8.5 8.5 0 0118.5 10c0 4.69-3.81 8.5-8.5 8.5a8.44 8.44 0 01-4.25-1.14L1.5 18.5l1.18-3.62A8.44 8.44 0 011.5 10 8.5 8.5 0 0110 1.5z' stroke='#00c27a' strokeWidth='1.5'/><path d='M7 9c.57 1.14 1.71 2.86 4 4' stroke='#00c27a' strokeWidth='1.5' strokeLinecap='round'/></svg>}
