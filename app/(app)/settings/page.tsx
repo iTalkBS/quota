@@ -451,6 +451,30 @@ const [fetching, setFetching] = useState(false)
             <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M6 4l4 4-4 4" stroke="#a8a5c0" strokeWidth="1.5" strokeLinecap="round"/></svg>
           </div>
         </Link>
+
+        <a
+          href="https://whatsapp.com/channel/0029Vb79k7i11ulNSlMoWg1z"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="q-settings-section"
+          style={{ display: 'block', textDecoration: 'none' }}
+        >
+          <div className="q-settings-row" style={{ border: 'none' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+              <div className="q-settings-icon" style={{ background: '#e8faf3' }}>
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <path d="M8 1.5C4.41 1.5 1.5 4.41 1.5 8c0 1.16.31 2.25.85 3.19L1.5 14.5l3.4-.84A6.46 6.46 0 008 14.5c3.59 0 6.5-2.91 6.5-6.5S11.59 1.5 8 1.5z" fill="#25D366"/>
+                  <path d="M10.9 9.43c-.16-.08-.94-.46-1.08-.52-.15-.05-.25-.08-.36.08-.1.16-.4.52-.5.63-.09.1-.18.12-.34.04-.16-.08-.68-.25-1.3-.8-.48-.43-.8-.96-.9-1.12-.09-.16-.01-.25.07-.33.07-.07.16-.18.24-.27.08-.09.1-.16.16-.26.05-.1.03-.19-.01-.27-.04-.08-.36-.86-.49-1.18-.13-.31-.26-.27-.36-.27h-.3c-.1 0-.28.04-.42.19-.15.16-.56.55-.56 1.33s.57 1.54.65 1.65c.08.1 1.12 1.7 2.7 2.39.38.16.67.26.9.33.38.12.72.1.99.06.3-.05.94-.38 1.07-.75.13-.37.13-.69.09-.75-.04-.07-.14-.11-.3-.19z" fill="white"/>
+                </svg>
+              </div>
+              <div>
+                <div style={{ fontSize: 14, fontWeight: 600, color: '#25D366' }}>Chat to us</div>
+                <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 1 }}>Join our WhatsApp channel for updates</div>
+              </div>
+            </div>
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M6 4l4 4-4 4" stroke="#a8a5c0" strokeWidth="1.5" strokeLinecap="round"/></svg>
+          </div>
+        </a>
       </div>
 
       <nav className="q-bottomnav">
