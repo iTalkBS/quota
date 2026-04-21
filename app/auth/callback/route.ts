@@ -21,7 +21,7 @@ export async function GET(request: Request) {
           return NextResponse.redirect(`${origin}/onboarding?welcome=1`)
         }
       }
-      return NextResponse.redirect(`${origin}/dashboard?confirmed=1`)
+      return NextResponse.redirect(`${origin}/dashboard`)
     }
   }
 

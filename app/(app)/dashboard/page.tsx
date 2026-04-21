@@ -10,19 +10,7 @@ export default function DashboardPage() {
   const [clients, setClients] = useState<any[]>([])
   const [profile, setProfile] = useState<any>(null)
   const [loading, setLoading] = useState(true)
-  const [showConfirmed, setShowConfirmed] = useState(false)
   const supabase = createClient()
-
-  useEffect(() => {
-    if (typeof window !== 'undefined') {
-      const params = new URLSearchParams(window.location.search)
-      if (params.get('confirmed') === '1') {
-        setShowConfirmed(true)
-        setTimeout(() => setShowConfirmed(false), 4000)
-        window.history.replaceState({}, '', '/dashboard')
-      }
-    }
-  }, [])
 
   useEffect(() => {
     const loadData = async () => {
@@ -83,16 +71,6 @@ export default function DashboardPage() {
       </div>
 
       <div className="q-scroll" style={{ paddingTop: 24 }}>
-        {showConfirmed && (
-          <div style={{ background: 'var(--green-bg)', border: '1px solid rgba(0,194,122,0.3)', borderRadius: 'var(--radius-sm)', padding: '14px 16px', marginBottom: 16, display: 'flex', alignItems: 'center', gap: 12 }}>
-            <svg width="20" height="20" viewBox="0 0 20 20" fill="none"><circle cx="10" cy="10" r="9" stroke="#00c27a" strokeWidth="1.5"/><path d="M6 10l3 3 5-5" stroke="#00c27a" strokeWidth="1.5" strokeLinecap="round"/></svg>
-            <div>
-              <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--green)' }}>Email confirmed</div>
-              <div style={{ fontSize: 12, color: 'var(--text2)' }}>Welcome to Qouta. Your account is ready.</div>
-            </div>
-          </div>
-        )}
-
         {loading ? (
           <div className="q-loading">Loading...</div>
         ) : isNewUser ? (
