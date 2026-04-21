@@ -115,7 +115,7 @@ South Africa (ZAR), Kenya (KES), Tanzania (TZS), Uganda (UGX), Zambia (ZMW), Zim
 Floating action buttons on document detail: PDF, WA, Edit, Pay, Invoice, Accept, Reject, Copy
 
 ## Known Limitations
-- iPhone PWA home screen icon shows purple "Q" letter-icon instead of the Qouta brand icon. Code fix is in place (apple-touch-icon.png correctly referenced in layout.tsx). Likely caused by iOS Safari caching a prior 404 and/or inconsistent Next.js App Router + iOS metadata handling. Deferred to future phase — try private Safari window + re-add to home screen to test.
+- iPhone PWA home screen icon only works when added from Safari. Chrome on iPhone ignores apple-touch-icon entirely — this is an Apple restriction, not fixable in code. Users must use Safari to add Qouta to their home screen.
 - Settings reloads on every tab switch (Next.js component unmount/remount — architectural limitation)
 - Supabase free tier has cold starts causing occasional slowness
 
